@@ -53,25 +53,36 @@ def discretized_gaussian_log_likelihood(x, *, means, log_scales):
     given image.
 
     :param x: the target images. It is assumed that this was uint8 values,
-              rescaled to the range [-1, 1].
-    :param means: the Gaussian mean Tensor.
-    :param log_scales: the Gaussian log stddev Tensor.
+              rescaled to the range [-1, 1]. 观测到的数据，x_start。
+    :param means: the Gaussian mean Tensor. 均值向量.
+    :param log_scales: the Gaussian log stddev Tensor. 标准方差的对数。
     :return: a tensor like x of log probabilities (in nats).
     """
+    # 连续的累计高斯分布函数的很小的两个值的差分，来模拟，离散的高斯分布的概率，NOTE
+    import ipdb; ipdb.set_trace() # NOTE
     assert x.shape == means.shape == log_scales.shape
+    # 减去均值: 
     centered_x = x - means
     inv_stdv = th.exp(-log_scales)
+
+    # 将[-1, 1]分成255个bins，最右边的cdf记为1，最左边的cdf记为0:
     plus_in = inv_stdv * (centered_x + 1.0 / 255.0)
-    cdf_plus = approx_standard_normal_cdf(plus_in)
+    cdf_plus = approx_standard_normal_cdf(plus_in) # cdf = 累计分布函数；这是去计算一个标准分布的，累计分布函数.
+
     min_in = inv_stdv * (centered_x - 1.0 / 255.0)
     cdf_min = approx_standard_normal_cdf(min_in)
-    log_cdf_plus = th.log(cdf_plus.clamp(min=1e-12))
-    log_one_minus_cdf_min = th.log((1.0 - cdf_min).clamp(min=1e-12))
+
+    log_cdf_plus = th.log(cdf_plus.clamp(min=1e-12)) # 稳定性，确保不能为0; 这是左边的一个极限值
+    log_one_minus_cdf_min = th.log((1.0 - cdf_min).clamp(min=1e-12)) # 两个辅助的遍历, 这是右边的一个极限值
+
+    # 用小范围的cdf之差来表示pdf, TODO
     cdf_delta = cdf_plus - cdf_min
+
+    # 对数概率：考虑到两个极限的地方，这里用到了两个where
     log_probs = th.where(
-        x < -0.999,
-        log_cdf_plus,
-        th.where(x > 0.999, log_one_minus_cdf_min, th.log(cdf_delta.clamp(min=1e-12))),
+        x < -0.999, # x在最左边的时候，
+        log_cdf_plus, # 取左边的极限值
+        th.where(x > 0.999, log_one_minus_cdf_min, th.log(cdf_delta.clamp(min=1e-12))), # x在最右边的时候，取右边的极限值。如果不在两个极限的附近，则取值是最后一个th.log，正常取log，即可。
     )
     assert log_probs.shape == x.shape
-    return log_probs
+    return log_probs # 最后返回的是，对数似然

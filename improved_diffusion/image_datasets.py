@@ -26,8 +26,8 @@ def load_data(
     """
     if not data_dir:
         raise ValueError("unspecified data directory")
-    all_files = _list_image_files_recursively(data_dir)
-    classes = None
+    all_files = _list_image_files_recursively(data_dir) # 找到所有的图片
+    classes = None # 图片的类别
     if class_cond:
         # Assume classes are the first part of the filename,
         # before an underscore.
@@ -63,7 +63,7 @@ def _list_image_files_recursively(data_dir):
         elif bf.isdir(full_path):
             results.extend(_list_image_files_recursively(full_path))
     return results
-
+    # 遍历到所有的图片类型。 TODO
 
 class ImageDataset(Dataset):
     def __init__(self, resolution, image_paths, classes=None, shard=0, num_shards=1):
@@ -93,7 +93,7 @@ class ImageDataset(Dataset):
         pil_image = pil_image.resize(
             tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC
         )
-
+        # 图片做一些归一化, TODO
         arr = np.array(pil_image.convert("RGB"))
         crop_y = (arr.shape[0] - self.resolution) // 2
         crop_x = (arr.shape[1] - self.resolution) // 2

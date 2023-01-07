@@ -15,21 +15,41 @@ from improved_diffusion.script_util import (
 )
 from improved_diffusion.train_util import TrainLoop
 
+import numpy as np
+import random
+import torch
+
+def set_rand_seed(seed):
+    np.random.seed(seed)
+    random.seed(seed)
+
+    torch.manual_seed(seed)
+
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic=True
 
 def main():
-    args = create_argparser().parse_args()
+    import ipdb; ipdb.set_trace()
+    # fix random seeds
+
+    seed = 666
+    set_rand_seed(666)
+
+    args = create_argparser().parse_args() # 各种控制参数的“汇总” TODO step 1
 
     dist_util.setup_dist()
     logger.configure()
 
+    import ipdb; ipdb.set_trace()
     logger.log("creating model and diffusion...")
     model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys())
+        **args_to_dict(args, model_and_diffusion_defaults().keys()) # TODO 创建model和diffusion对象 step 2
     )
     model.to(dist_util.dev())
-    schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
+    schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion) # 返回的是采样器
 
-    logger.log("creating data loader...")
+    import ipdb; ipdb.set_trace()
+    logger.log("creating data loader...") # step 3, load data，导入数据
     data = load_data(
         data_dir=args.data_dir,
         batch_size=args.batch_size,
@@ -37,7 +57,8 @@ def main():
         class_cond=args.class_cond,
     )
 
-    logger.log("training...")
+    logger.log("training...") # step 4, 开启训练loop
+    import ipdb; ipdb.set_trace()
     TrainLoop(
         model=model,
         diffusion=diffusion,
@@ -56,6 +77,8 @@ def main():
         lr_anneal_steps=args.lr_anneal_steps,
     ).run_loop()
 
+    import ipdb; ipdb.set_trace()
+    # finally stop
 
 def create_argparser():
     defaults = dict(
@@ -74,7 +97,7 @@ def create_argparser():
         fp16_scale_growth=1e-3,
     )
     defaults.update(model_and_diffusion_defaults())
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser() # 接受的来自命令行的参数key-value
     add_dict_to_argparser(parser, defaults)
     return parser
 

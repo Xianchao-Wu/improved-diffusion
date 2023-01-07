@@ -36,26 +36,27 @@ def model_and_diffusion_defaults():
 
 
 def create_model_and_diffusion(
-    image_size,
-    class_cond,
-    learn_sigma,
+    image_size, # 图片size
+    class_cond, # 是否是带class条件的
+    learn_sigma, # 是否学习sigma 方差
     sigma_small,
     num_channels,
     num_res_blocks,
     num_heads,
     num_heads_upsample,
-    attention_resolutions,
+    attention_resolutions, # 在哪些block上做attention? TODO
     dropout,
     diffusion_steps,
     noise_schedule,
     timestep_respacing,
-    use_kl,
+    use_kl, # 是否使用kl散度
     predict_xstart,
     rescale_timesteps,
     rescale_learned_sigmas,
     use_checkpoint,
     use_scale_shift_norm,
 ):
+    import ipdb; ipdb.set_trace()
     model = create_model(
         image_size,
         num_channels,
@@ -68,7 +69,9 @@ def create_model_and_diffusion(
         num_heads_upsample=num_heads_upsample,
         use_scale_shift_norm=use_scale_shift_norm,
         dropout=dropout,
-    )
+    ) # TODO 创建模型
+
+    import ipdb; ipdb.set_trace()
     diffusion = create_gaussian_diffusion(
         steps=diffusion_steps,
         learn_sigma=learn_sigma,
@@ -79,7 +82,9 @@ def create_model_and_diffusion(
         rescale_timesteps=rescale_timesteps,
         rescale_learned_sigmas=rescale_learned_sigmas,
         timestep_respacing=timestep_respacing,
-    )
+    ) # TODO 扩散过程
+
+    import ipdb; ipdb.set_trace()
     return model, diffusion
 
 
@@ -239,13 +244,16 @@ def create_gaussian_diffusion(
     rescale_learned_sigmas=False,
     timestep_respacing="",
 ):
-    betas = gd.get_named_beta_schedule(noise_schedule, steps)
+    # 生成扩散的框架
+    import ipdb; ipdb.set_trace()
+    betas = gd.get_named_beta_schedule(noise_schedule, steps) # determine beta schedule
+
     if use_kl:
         loss_type = gd.LossType.RESCALED_KL
     elif rescale_learned_sigmas:
         loss_type = gd.LossType.RESCALED_MSE
     else:
-        loss_type = gd.LossType.MSE
+        loss_type = gd.LossType.MSE # 这就是和原来的ddpm文章一样，直接使用的是ddpm的mse loss
     if not timestep_respacing:
         timestep_respacing = [steps]
     return SpacedDiffusion(
@@ -276,11 +284,11 @@ def add_dict_to_argparser(parser, default_dict):
         elif isinstance(v, bool):
             v_type = str2bool
         parser.add_argument(f"--{k}", default=v, type=v_type)
-
+        # 这是从字典中，自动生产出来arg parser，循环地搞起add_argument了！NOTE
 
 def args_to_dict(args, keys):
     return {k: getattr(args, k) for k in keys}
-
+    # args: 大的超参数的集合；
 
 def str2bool(v):
     """

@@ -70,9 +70,10 @@ class SpacedDiffusion(GaussianDiffusion):
     """
 
     def __init__(self, use_timesteps, **kwargs):
+        import ipdb; ipdb.set_trace()
         self.use_timesteps = set(use_timesteps)
-        self.timestep_map = []
-        self.original_num_steps = len(kwargs["betas"])
+        self.timestep_map = [] # TODO, 是连续的，还是跳跃式的(spaced的)
+        self.original_num_steps = len(kwargs["betas"]) # 做多少步的加噪
 
         base_diffusion = GaussianDiffusion(**kwargs)  # pylint: disable=missing-kwoa
         last_alpha_cumprod = 1.0
@@ -87,12 +88,16 @@ class SpacedDiffusion(GaussianDiffusion):
 
     def p_mean_variance(
         self, model, *args, **kwargs
-    ):  # pylint: disable=signature-differs
+    ):  # pylint: disable=signature-differs TODO
+        import ipdb; ipdb.set_trace()
         return super().p_mean_variance(self._wrap_model(model), *args, **kwargs)
 
     def training_losses(
         self, model, *args, **kwargs
     ):  # pylint: disable=signature-differs
+        # TODO, 根据传入的loss type的不同，得到不同的损失函数
+        import ipdb; ipdb.set_trace()
+        # kl loss, mse loss, and so on
         return super().training_losses(self._wrap_model(model), *args, **kwargs)
 
     def _wrap_model(self, model):
@@ -109,14 +114,17 @@ class SpacedDiffusion(GaussianDiffusion):
 
 class _WrappedModel:
     def __init__(self, model, timestep_map, rescale_timesteps, original_num_steps):
+        import ipdb; ipdb.set_trace()
         self.model = model
         self.timestep_map = timestep_map
         self.rescale_timesteps = rescale_timesteps
         self.original_num_steps = original_num_steps
 
     def __call__(self, x, ts, **kwargs):
+        import ipdb; ipdb.set_trace()
         map_tensor = th.tensor(self.timestep_map, device=ts.device, dtype=ts.dtype)
         new_ts = map_tensor[ts]
         if self.rescale_timesteps:
             new_ts = new_ts.float() * (1000.0 / self.original_num_steps)
         return self.model(x, new_ts, **kwargs)
+        # 
