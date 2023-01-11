@@ -30,57 +30,58 @@ class TrainLoop:
     def __init__(
         self,
         *,
-        model,
-        diffusion,
-        data,
-        batch_size,
-        microbatch,
-        lr,
-        ema_rate,
-        log_interval,
-        save_interval,
-        resume_checkpoint,
+        model, # <class 'improved_diffusion.unet.UNetModel'>
+        diffusion, # <class 'improved_diffusion.respace.SpacedDiffusion'>
+        data, # <class 'generator'>
+        batch_size, # 128
+        microbatch, # -1
+        lr, # 0.0001
+        ema_rate, # '0.9999'
+        log_interval, # 10
+        save_interval, # 10000
+        resume_checkpoint, # ''
         use_fp16=False,
-        fp16_scale_growth=1e-3,
-        schedule_sampler=None,
-        weight_decay=0.0,
-        lr_anneal_steps=0,
+        fp16_scale_growth=1e-3, # 0.001
+        schedule_sampler=None, # <improved_diffusion.resample.LossSecondMomentResampler object at 0x7f4db0788490>
+        weight_decay=0.0, # 0.0
+        lr_anneal_steps=0, # 0
     ):
-        self.model = model
-        self.diffusion = diffusion
-        self.data = data
-        self.batch_size = batch_size
-        self.microbatch = microbatch if microbatch > 0 else batch_size
-        self.lr = lr
+        import ipdb; ipdb.set_trace()
+        self.model = model # UNetModel
+        self.diffusion = diffusion # SpacedDiffusion
+        self.data = data # generator, dataset
+        self.batch_size = batch_size # 128
+        self.microbatch = microbatch if microbatch > 0 else batch_size # 128
+        self.lr = lr # 0.0001
         self.ema_rate = (
-            [ema_rate]
+            [ema_rate] # '0.9999'
             if isinstance(ema_rate, float)
             else [float(x) for x in ema_rate.split(",")]
-        )
-        self.log_interval = log_interval
-        self.save_interval = save_interval
-        self.resume_checkpoint = resume_checkpoint
-        self.use_fp16 = use_fp16
-        self.fp16_scale_growth = fp16_scale_growth
-        self.schedule_sampler = schedule_sampler or UniformSampler(diffusion)
-        self.weight_decay = weight_decay
-        self.lr_anneal_steps = lr_anneal_steps
+        ) # [0.9999]
+        self.log_interval = log_interval # 10
+        self.save_interval = save_interval # 10000
+        self.resume_checkpoint = resume_checkpoint # ''
+        self.use_fp16 = use_fp16 # False
+        self.fp16_scale_growth = fp16_scale_growth # 0.001
+        self.schedule_sampler = schedule_sampler or UniformSampler(diffusion) # 这个是使用已有的LossSecondMomentResampler NOTE
+        self.weight_decay = weight_decay # 0.0
+        self.lr_anneal_steps = lr_anneal_steps # 0
 
         self.step = 0
         self.resume_step = 0
-        self.global_batch = self.batch_size * dist.get_world_size()
+        self.global_batch = self.batch_size * dist.get_world_size() # 128*1 = 128
 
-        self.model_params = list(self.model.parameters())
+        self.model_params = list(self.model.parameters()) # 451个元素
         self.master_params = self.model_params
-        self.lg_loss_scale = INITIAL_LOG_LOSS_SCALE
-        self.sync_cuda = th.cuda.is_available()
-
+        self.lg_loss_scale = INITIAL_LOG_LOSS_SCALE # 20.0
+        self.sync_cuda = th.cuda.is_available() # True
+        import ipdb; ipdb.set_trace() # NOTE
         self._load_and_sync_parameters()
-        if self.use_fp16:
+        if self.use_fp16: # False
             self._setup_fp16()
 
-        self.opt = AdamW(self.master_params, lr=self.lr, weight_decay=self.weight_decay)
-        if self.resume_step:
+        self.opt = AdamW(self.master_params, lr=self.lr, weight_decay=self.weight_decay) # len(self.master_params)=451, self.lr=0.0001, 0.0
+        if self.resume_step: # not in
             self._load_optimizer_state()
             # Model was resumed, either due to a restart or a checkpoint
             # being specified at the command line.
@@ -89,19 +90,23 @@ class TrainLoop:
             ]
         else:
             self.ema_params = [
-                copy.deepcopy(self.master_params) for _ in range(len(self.ema_rate))
-            ]
+                copy.deepcopy(self.master_params) for _ in range(len(self.ema_rate)) # NOTE here
+            ] # len(self.ema_params)=1, len(self.ema_params[0])=451
+
+        import ipdb; ipdb.set_trace()
 
         if th.cuda.is_available():
-            self.use_ddp = True
+            self.use_ddp = True # TODO here now...
+            # TODO for debug, do not use DDP
+            debug = True
             self.ddp_model = DDP(
                 self.model,
-                device_ids=[dist_util.dev()],
-                output_device=dist_util.dev(),
+                device_ids=[dist_util.dev()], # device(type='cuda', index=0)
+                output_device=dist_util.dev(), # device(type='cuda', index=0)
                 broadcast_buffers=False,
                 bucket_cap_mb=128,
                 find_unused_parameters=False,
-            )
+            ) if not debug else self.model
         else:
             if dist.get_world_size() > 1:
                 logger.warn(
@@ -112,7 +117,7 @@ class TrainLoop:
             self.ddp_model = self.model
 
     def _load_and_sync_parameters(self):
-        resume_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
+        resume_checkpoint = find_resume_checkpoint() or self.resume_checkpoint # '', not resume checkpoint
 
         if resume_checkpoint:
             self.resume_step = parse_resume_step_from_filename(resume_checkpoint)
@@ -123,7 +128,7 @@ class TrainLoop:
                         resume_checkpoint, map_location=dist_util.dev()
                     )
                 )
-
+        import ipdb; ipdb.set_trace() # NOTE this is important! 在多个gpu之间同步参数
         dist_util.sync_params(self.model.parameters())
 
     def _load_ema_parameters(self, rate):
@@ -159,11 +164,12 @@ class TrainLoop:
         self.model.convert_to_fp16()
 
     def run_loop(self):
+        import ipdb; ipdb.set_trace()
         while (
             not self.lr_anneal_steps
             or self.step + self.resume_step < self.lr_anneal_steps
         ):
-            batch, cond = next(self.data)
+            batch, cond = next(self.data) # batch.shape=[1, 3, 64, 64]; cond={'y': tensor([1])}
             self.run_step(batch, cond)
             if self.step % self.log_interval == 0:
                 logger.dumpkvs()
@@ -177,35 +183,37 @@ class TrainLoop:
         if (self.step - 1) % self.save_interval != 0:
             self.save()
 
-    def run_step(self, batch, cond):
+    def run_step(self, batch, cond): # batch.shape=[1, 3, 64, 64]; cond={'y': tensor([1])
+        import ipdb; ipdb.set_trace()
         self.forward_backward(batch, cond)
-        if self.use_fp16:
+        if self.use_fp16: # False, not in
             self.optimize_fp16()
         else:
-            self.optimize_normal()
+            self.optimize_normal() # NOTE here, in
         self.log_step()
 
-    def forward_backward(self, batch, cond):
-        zero_grad(self.model_params)
-        for i in range(0, batch.shape[0], self.microbatch):
-            micro = batch[i : i + self.microbatch].to(dist_util.dev())
+    def forward_backward(self, batch, cond): # batch.shape=[1,3,64,64]; cond={'y': tensor([1])
+        import ipdb; ipdb.set_trace()
+        zero_grad(self.model_params) # len(self.model_params)=451, 
+        for i in range(0, batch.shape[0], self.microbatch): # batch.shape[0]=1, self.microbatch=1
+            micro = batch[i : i + self.microbatch].to(dist_util.dev()) # [1,3,64,64]
             micro_cond = {
                 k: v[i : i + self.microbatch].to(dist_util.dev())
                 for k, v in cond.items()
-            }
-            last_batch = (i + self.microbatch) >= batch.shape[0]
-            t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev())
-
+            } # {'y': tensor([1], device='cuda:0')}
+            last_batch = (i + self.microbatch) >= batch.shape[0] # True, last_micro_batch (in current batch)
+            t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev()) # NOTE, 这是采样出来一个t，以及weights, dist_util.dev()="device(type='cuda', index=0)"
+            import ipdb; ipdb.set_trace()
             compute_losses = functools.partial(
                 self.diffusion.training_losses,
                 self.ddp_model,
-                micro,
-                t,
-                model_kwargs=micro_cond,
+                micro, # [1, 3, 64, 64], a micro batch
+                t, # e.g., tensor([2801], device='cuda:0')
+                model_kwargs=micro_cond, # {'y': tensor([1], device='cuda:0')}
             )
 
             if last_batch or not self.use_ddp:
-                losses = compute_losses()
+                losses = compute_losses() # NOTE
             else:
                 with self.ddp_model.no_sync():
                     losses = compute_losses()
@@ -214,7 +222,7 @@ class TrainLoop:
                 self.schedule_sampler.update_with_local_losses(
                     t, losses["loss"].detach()
                 )
-
+            import ipdb; ipdb.set_trace()
             loss = (losses["loss"] * weights).mean()
             log_loss_dict(
                 self.diffusion, t, {k: v * weights for k, v in losses.items()}
@@ -269,6 +277,7 @@ class TrainLoop:
             logger.logkv("lg_loss_scale", self.lg_loss_scale)
 
     def save(self):
+        import ipdb; ipdb.set_trace()
         def save_checkpoint(rate, params):
             state_dict = self._master_params_to_state_dict(params)
             if dist.get_rank() == 0:

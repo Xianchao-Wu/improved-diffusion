@@ -15,7 +15,7 @@ from .nn import mean_flat
 from .losses import normal_kl, discretized_gaussian_log_likelihood
 
 
-def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
+def get_named_beta_schedule(schedule_name, num_diffusion_timesteps): # 'cosine', 4000
     """
     Get a pre-defined beta schedule for the given name. 一个加噪的方案.
 
@@ -36,7 +36,7 @@ def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
         )
     elif schedule_name == "cosine": # TODO 余弦的加噪方案, 论文中的公式16
         return betas_for_alpha_bar(
-            num_diffusion_timesteps,
+            num_diffusion_timesteps, # 4000
             lambda t: math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2,
         )
     else:
@@ -57,7 +57,7 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
     """
     import ipdb; ipdb.set_trace()
     betas = []
-    for i in range(num_diffusion_timesteps):
+    for i in range(num_diffusion_timesteps): # 4000
         t1 = i / num_diffusion_timesteps # for 'i'
         t2 = (i + 1) / num_diffusion_timesteps # for 'i+1'
         betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
@@ -123,26 +123,26 @@ class GaussianDiffusion:
 
     def __init__(
         self,
-        *,
-        betas,
-        model_mean_type,
-        model_var_type,
-        loss_type,
-        rescale_timesteps=False,
+        *, # 这个*, 有意思！ NOTE
+        betas, # 4000
+        model_mean_type, # <ModelMeanType.EPSILON: 3>
+        model_var_type, # <ModelVarType.LEARNED_RANGE: 4>
+        loss_type, # <LossType.RESCALED_KL: 4>
+        rescale_timesteps=False, # True
     ):
         import ipdb; ipdb.set_trace()
-        self.model_mean_type = model_mean_type
-        self.model_var_type = model_var_type
+        self.model_mean_type = model_mean_type # <ModelMeanType.EPSILON: 3>
+        self.model_var_type = model_var_type # <ModelVarType.LEARNED_RANGE: 4> 
         self.loss_type = loss_type # mse, kl, or mse+kl
-        self.rescale_timesteps = rescale_timesteps # 对时间进行缩放
+        self.rescale_timesteps = rescale_timesteps # True, 是否对时间进行缩放
 
         # Use float64 for accuracy.
         betas = np.array(betas, dtype=np.float64) # 一维的向量，需要beta in [0,1]
         self.betas = betas
-        assert len(betas.shape) == 1, "betas must be 1-D"
+        assert len(betas.shape) == 1, "betas must be 1-D" # betas.shape=(4000,), 是一维向量
         assert (betas > 0).all() and (betas <= 1).all()
 
-        self.num_timesteps = int(betas.shape[0])
+        self.num_timesteps = int(betas.shape[0]) # 4000
 
         alphas = 1.0 - betas # ddpm中的定义
         self.alphas_cumprod = np.cumprod(alphas, axis=0) # 连乘 NOTE, alpha_t_bar
@@ -151,7 +151,7 @@ class GaussianDiffusion:
         assert self.alphas_cumprod_prev.shape == (self.num_timesteps,)
 
         import ipdb; ipdb.set_trace()
-
+        # NOTE, 下面的一些变量，都是ddpm论文中定义的：
         # calculations for diffusion q(x_t | x_{t-1}) and others
         self.sqrt_alphas_cumprod = np.sqrt(self.alphas_cumprod) # 根号下，alpha_t_bar
         self.sqrt_one_minus_alphas_cumprod = np.sqrt(1.0 - self.alphas_cumprod) # 根号下， 1 - alpha_t_bar
@@ -205,9 +205,9 @@ class GaussianDiffusion:
 
         In other words, sample from q(x_t | x_0). 做采样的。对论文中的公式(8)进行的重参数的过程. 一次炸好几层的楼.
 
-        :param x_start: the initial data batch.
-        :param t: the number of diffusion steps (minus 1). Here, 0 means one step.
-        :param noise: if specified, the split-out normal noise.
+        :param x_start: the initial data batch. e.g., [1, 3, 64, 64]
+        :param t: the number of diffusion steps (minus 1). Here, 0 means one step. e.g., tensor([2801], device='cuda:0')
+        :param noise: if specified, the split-out normal noise. 刚才生成的Noise/epsilon, shape=[1, 3, 64, 64]
         :return: A noisy version of x_start.
         """
         import ipdb; ipdb.set_trace() # 重参数采样
@@ -218,28 +218,28 @@ class GaussianDiffusion:
             _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
             + _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
             * noise
-        )
-
+        ) # TODO 这里是调用了ddpm里面的一步炸楼的公式！ x_t = sqrt(alpha_t_bar) * x_0 + sqrt(1-alpha_t_bar)*noise
+        # 需要注意的是，_extract_info_tensor是从一个tensor中，按照t，来抽取一个“切片”而已。
     def q_posterior_mean_variance(self, x_start, x_t, t):
         """
         Compute the mean and variance of the diffusion posterior:
 
             q(x_{t-1} | x_t, x_0)， 计算论文中的公式9，10.
-
+            x_start: x_0, [1, 3, 64, 64]; x_t: [1, 3, 64, 64]; t=tensor([2801], device='cuda:0') 
         """
         import ipdb; ipdb.set_trace()
         assert x_start.shape == x_t.shape
         posterior_mean = (
             _extract_into_tensor(self.posterior_mean_coef1, t, x_t.shape) * x_start
             + _extract_into_tensor(self.posterior_mean_coef2, t, x_t.shape) * x_t
-        ) # 公式(10)
+        ) # 公式(10), posterior_mean.shape=[1, 3, 64, 64]
         
         # 事先计算好了，直接拿一下就好了: NOTE
         posterior_variance = _extract_into_tensor(self.posterior_variance, t, x_t.shape)
-        
+        # [1, 3, 64, 64]
         posterior_log_variance_clipped = _extract_into_tensor(
             self.posterior_log_variance_clipped, t, x_t.shape
-        )
+        ) # [1, 3, 64, 64]
         assert (
             posterior_mean.shape[0]
             == posterior_variance.shape[0]
@@ -247,7 +247,7 @@ class GaussianDiffusion:
             == x_start.shape[0]
         )
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
-        # 后验分布的，均值和方差
+        # 后验分布的，均值和方差; all in the shape of [1, 3, 64, 64]
 
     def p_mean_variance(
         self, model, x, t, clip_denoised=True, denoised_fn=None, model_kwargs=None
@@ -261,14 +261,14 @@ class GaussianDiffusion:
 
         :param model: the model, which takes a signal and a batch of timesteps
                       as input.
-        :param x: the [N x C x ...] tensor at time t.
-        :param t: a 1-D Tensor of timesteps.
-        :param clip_denoised: if True, clip the denoised signal into [-1, 1].
+        :param x: the [N x C x ...] tensor at time t. e.g., x_t.shape=[1, 3, 64, 64]
+        :param t: a 1-D Tensor of timesteps. e.g., tensor([2801], device='cuda:0')
+        :param clip_denoised: if True, clip the denoised signal into [-1, 1]. e.g., False
         :param denoised_fn: if not None, a function which applies to the
             x_start prediction before it is used to sample. Applies before
-            clip_denoised.
+            clip_denoised. e.g., denoised_fn=None
         :param model_kwargs: if not None, a dict of extra keyword arguments to
-            pass to the model. This can be used for conditioning.
+            pass to the model. This can be used for conditioning. e.g., {'y': tensor([1], device='cuda:0')}
         :return: a dict with the following keys:
                  - 'mean': the model mean output.
                  - 'variance': the model variance output.
@@ -280,10 +280,10 @@ class GaussianDiffusion:
         if model_kwargs is None:
             model_kwargs = {}
 
-        B, C = x.shape[:2]
+        B, C = x.shape[:2] # B=batch.size=1, C=channel.size=3
         assert t.shape == (B,)
         model_output = model(x, self._scale_timesteps(t), **model_kwargs) # NOTE 调用model forward函数！
-
+        import ipdb; ipdb.set_trace()
         # 得到方差和对数方差
         if self.model_var_type in [ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
             # 可学习的方差
@@ -715,11 +715,11 @@ class GaussianDiffusion:
         # 真实的x[0], x[t]和t，去计算出x[t-1]的均值与方差
         true_mean, _, true_log_variance_clipped = self.q_posterior_mean_variance(
             x_start=x_start, x_t=x_t, t=t
-        )
+        ) # true_mean and true_log_variance_clipped.shape = [1, 3, 64, 64]
         # x[t]，t和预测出来的x[0]，去计算出x[t-1]的均值与方差，放入out
         out = self.p_mean_variance(
             model, x_t, t, clip_denoised=clip_denoised, model_kwargs=model_kwargs
-        )
+        ) # clip_denoised=False, model_kwargs={'y': tensor([1], device='cuda:0')}
 
         # p_theta与q，这两个分布之间的kl散度
         # 对应着L[t-1]损失函数：
@@ -747,32 +747,32 @@ class GaussianDiffusion:
         Compute training losses for a single timestep.
 
         :param model: the model to evaluate loss on.
-        :param x_start: the [N x C x ...] tensor of inputs. X_0
-        :param t: a batch of timestep indices.
+        :param x_start: the [N x C x ...] tensor of inputs. X_0, e.g., torch.Size([1, 3, 64, 64])
+        :param t: a batch of timestep indices. e.g., tensor([2801], device='cuda:0')
         :param model_kwargs: if not None, a dict of extra keyword arguments to
-            pass to the model. This can be used for conditioning.
-        :param noise: if specified, the specific Gaussian noise to try to remove.
+            pass to the model. This can be used for conditioning. e.g., {'y': tensor([1], device='cuda:0')}
+        :param noise: if specified, the specific Gaussian noise to try to remove. e.g., noise=None
         :return: a dict with the key "loss" containing a tensor of shape [N].
                  Some mean or variance settings may also have other keys.
         """
         import ipdb; ipdb.set_trace()
         # 我们需要这个函数来确定，最后有哪些loss被使用来train NOTE
         if model_kwargs is None:
-            model_kwargs = {}
+            model_kwargs = {} # not in here
         if noise is None:
-            noise = th.randn_like(x_start)
-        x_t = self.q_sample(x_start, t, noise=noise) # 从x_0跳跃到x_t，一步炸楼的多层
-
+            noise = th.randn_like(x_start) # -> noise.shape=[1, 3, 64, 64]
+        x_t = self.q_sample(x_start, t, noise=noise) # NOTE 从x_0跳跃到x_t，一步炸楼的多层
+        # x_t.shape = [1, 3, 64, 64]，中间的废墟
         terms = {}
 
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
-            terms["loss"] = self._vb_terms_bpd(
+            terms["loss"] = self._vb_terms_bpd( # NOTE here, <LossType.RESCALED_KL: 4>
                 model=model,
                 x_start=x_start,
                 x_t=x_t,
                 t=t,
                 clip_denoised=False,
-                model_kwargs=model_kwargs,
+                model_kwargs=model_kwargs, # {'y': tensor([1], device='cuda:0')}
             )["output"]
             if self.loss_type == LossType.RESCALED_KL:
                 terms["loss"] *= self.num_timesteps # NOTE 论文中的设置，乘以一个weight = num-timesteps
@@ -817,7 +817,7 @@ class GaussianDiffusion:
                 terms["loss"] = terms["mse"]
         else:
             raise NotImplementedError(self.loss_type)
-
+        import ipdb; ipdb.set_trace()
         return terms
 
     def _prior_bpd(self, x_start):
@@ -907,11 +907,20 @@ def _extract_into_tensor(arr, timesteps, broadcast_shape):
     :param arr: the 1-D numpy array.
     :param timesteps: a tensor of indices into the array to extract.
     :param broadcast_shape: a larger shape of K dimensions with the batch
-                            dimension equal to the length of timesteps.
+                            dimension equal to the length of timesteps. e.g., torch.Size([1, 3, 64, 64])
     :return: a tensor of shape [batch_size, 1, ...] where the shape has K dims.
     """
     # 辅助函数，从一个tensor中，取某个时刻.
-    res = th.from_numpy(arr).to(device=timesteps.device)[timesteps].float()
+    res = th.from_numpy(arr).to(device=timesteps.device)[timesteps].float() # arr.shape=(4000,), timesteps=tensor([2801], device='cuda:0'), res=tensor([0.4500], device='cuda:0')
     while len(res.shape) < len(broadcast_shape):
         res = res[..., None]
     return res.expand(broadcast_shape)
+    
+    # e.g.,
+    # ipdb> temp.shape
+    #    torch.Size([1, 3, 64, 64])
+    #    ipdb> temp
+    #    tensor([[[[0.4500, 0.4500, 0.4500,  ..., 0.4500, 0.4500, 0.4500],
+    #              [0.4500, 0.4500, 0.4500,  ..., 0.4500, 0.4500, 0.4500],
+    #              [0.4500, 0.4500, 0.4500,  ..., 0.4500, 0.4500, 0.4500],
+

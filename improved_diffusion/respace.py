@@ -69,29 +69,29 @@ class SpacedDiffusion(GaussianDiffusion):
     :param kwargs: the kwargs to create the base diffusion process.
     """
 
-    def __init__(self, use_timesteps, **kwargs):
+    def __init__(self, use_timesteps, **kwargs): # dict_keys(['betas', 'model_mean_type'=epsilon:3, 'model_var_type=learned_range:4', 'loss_type:rescaled_kl:4', 'rescale_timesteps=True']) for 'kwargs'!
         import ipdb; ipdb.set_trace()
-        self.use_timesteps = set(use_timesteps)
+        self.use_timesteps = set(use_timesteps) # {0, 1, ..., 3999}
         self.timestep_map = [] # TODO, 是连续的，还是跳跃式的(spaced的)
-        self.original_num_steps = len(kwargs["betas"]) # 做多少步的加噪
-
+        self.original_num_steps = len(kwargs["betas"]) # 做多少步的加噪, 4000
+        import ipdb; ipdb.set_trace() # TODO
         base_diffusion = GaussianDiffusion(**kwargs)  # pylint: disable=missing-kwoa
         last_alpha_cumprod = 1.0
         new_betas = []
         for i, alpha_cumprod in enumerate(base_diffusion.alphas_cumprod):
-            if i in self.use_timesteps:
+            if i in self.use_timesteps: # 4000 for 4000, 目前都在里面
                 new_betas.append(1 - alpha_cumprod / last_alpha_cumprod)
                 last_alpha_cumprod = alpha_cumprod
                 self.timestep_map.append(i)
-        kwargs["betas"] = np.array(new_betas)
-        super().__init__(**kwargs)
+        kwargs["betas"] = np.array(new_betas) # 对betas求和=15.210434270813122; 对new_betas求和：15.210434270813133; 两者基本没有变化... NOTE
+        super().__init__(**kwargs) # TODO, why, call __init__ again? Line 78已经call过了啊... 主要原因：因为betas -> new_betas了，有可能修改了betas，所以这里重新计算了从betas, alphas，到其他所有的一共14个变量。NOTE okay.
 
     def p_mean_variance(
         self, model, *args, **kwargs
     ):  # pylint: disable=signature-differs TODO
         import ipdb; ipdb.set_trace()
         return super().p_mean_variance(self._wrap_model(model), *args, **kwargs)
-
+        # model is already "_WrappedModel", so just return 'model'
     def training_losses(
         self, model, *args, **kwargs
     ):  # pylint: disable=signature-differs
@@ -105,9 +105,9 @@ class SpacedDiffusion(GaussianDiffusion):
             return model
         return _WrappedModel(
             model, self.timestep_map, self.rescale_timesteps, self.original_num_steps
-        )
+        ) # self.rescale_timesteps=True, self.original_num_steps=4000
 
-    def _scale_timesteps(self, t):
+    def _scale_timesteps(self, t): # e.g., t=tensor([2801], device='cuda:0')
         # Scaling is done by the wrapped model.
         return t
 
@@ -115,16 +115,21 @@ class SpacedDiffusion(GaussianDiffusion):
 class _WrappedModel:
     def __init__(self, model, timestep_map, rescale_timesteps, original_num_steps):
         import ipdb; ipdb.set_trace()
-        self.model = model
-        self.timestep_map = timestep_map
-        self.rescale_timesteps = rescale_timesteps
-        self.original_num_steps = original_num_steps
+        self.model = model # <class 'improved_diffusion.unet.UNetModel'>
+        self.timestep_map = timestep_map # a list with 4000 values: [0, 1, 2, 3, 4, ...]
+        self.rescale_timesteps = rescale_timesteps # True
+        self.original_num_steps = original_num_steps # 4000
 
-    def __call__(self, x, ts, **kwargs):
+    def __call__(self, x, ts, **kwargs): # x.shape=[1, 3, 64, 64], ts=[2801], kwargs={'y': tensor([1], device='cuda:0')}
         import ipdb; ipdb.set_trace()
-        map_tensor = th.tensor(self.timestep_map, device=ts.device, dtype=ts.dtype)
-        new_ts = map_tensor[ts]
-        if self.rescale_timesteps:
-            new_ts = new_ts.float() * (1000.0 / self.original_num_steps)
-        return self.model(x, new_ts, **kwargs)
-        # 
+        map_tensor = th.tensor(self.timestep_map, device=ts.device, dtype=ts.dtype) # tensor([   0,    1,    2,  ..., 3997, 3998, 3999], device='cuda:0')
+        new_ts = map_tensor[ts] # tensor([2801], device='cuda:0')
+        if self.rescale_timesteps: # True NOTE
+            new_ts = new_ts.float() * (1000.0 / self.original_num_steps) # 2801 * 1000.0/4000 = tensor([700.2500], device='cuda:0')
+
+        import ipdb; ipdb.set_trace()
+        return self.model(x, new_ts, **kwargs) # NOTE forward
+        # x.shape = [1, 3, 64, 64]
+        # new_ts = tensor([700.2500], device='cuda:0')
+        # kwargs = {'y': tensor([1], device='cuda:0')}
+

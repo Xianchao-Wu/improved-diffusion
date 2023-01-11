@@ -19,16 +19,16 @@ class GroupNorm32(nn.GroupNorm):
         return super().forward(x.float()).type(x.dtype)
 
 
-def conv_nd(dims, *args, **kwargs):
+def conv_nd(dims, *args, **kwargs): # dim=2, args=(3, 128, 3), kwargs={'padding': 1}
     """
-    Create a 1D, 2D, or 3D convolution module.
+    Create a 1D, 2D, or 3D convolution module. nd = dimension is 'n'；构建n维卷积.
     """
     if dims == 1:
         return nn.Conv1d(*args, **kwargs)
     elif dims == 2:
-        return nn.Conv2d(*args, **kwargs)
+        return nn.Conv2d(*args, **kwargs) # NOTE, Conv2d(3, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
     elif dims == 3:
-        return nn.Conv3d(*args, **kwargs)
+        return nn.Conv3d(*args, **kwargs)  
     raise ValueError(f"unsupported dimensions: {dims}")
 
 
@@ -105,20 +105,20 @@ def timestep_embedding(timesteps, dim, max_period=10000):
     Create sinusoidal timestep embeddings.
 
     :param timesteps: a 1-D Tensor of N indices, one per batch element.
-                      These may be fractional.
-    :param dim: the dimension of the output.
-    :param max_period: controls the minimum frequency of the embeddings.
+                      These may be fractional. e.g., tensor([700.2500], device='cuda:0')
+    :param dim: the dimension of the output. e.g., 128=dim
+    :param max_period: controls the minimum frequency of the embeddings. e.g., 10000
     :return: an [N x dim] Tensor of positional embeddings.
     """
-    half = dim // 2
+    half = dim // 2 # 64
     freqs = th.exp(
         -math.log(max_period) * th.arange(start=0, end=half, dtype=th.float32) / half
     ).to(device=timesteps.device)
     args = timesteps[:, None].float() * freqs[None]
-    embedding = th.cat([th.cos(args), th.sin(args)], dim=-1)
+    embedding = th.cat([th.cos(args), th.sin(args)], dim=-1) # 这里类似于位置编码
     if dim % 2:
         embedding = th.cat([embedding, th.zeros_like(embedding[:, :1])], dim=-1)
-    return embedding
+    return embedding # e.g., [1, 128], 一共就一个time t，这是把这个标量，用一个128维度的向量表示
 
 
 def checkpoint(func, inputs, params, flag):

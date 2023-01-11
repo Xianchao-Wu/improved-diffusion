@@ -123,29 +123,37 @@ class ResBlock(TimestepBlock):
 
     def __init__(
         self,
-        channels,
-        emb_channels,
-        dropout,
-        out_channels=None,
-        use_conv=False,
-        use_scale_shift_norm=False,
-        dims=2,
-        use_checkpoint=False,
+        channels, # 128
+        emb_channels, # 512
+        dropout, # 0.0
+        out_channels=None, # 128
+        use_conv=False, # False
+        use_scale_shift_norm=False, # True
+        dims=2, # 2
+        use_checkpoint=False, # False
     ):
         super().__init__()
         self.channels = channels
         self.emb_channels = emb_channels
         self.dropout = dropout
-        self.out_channels = out_channels or channels
+        self.out_channels = out_channels or channels # 128
         self.use_conv = use_conv
         self.use_checkpoint = use_checkpoint
         self.use_scale_shift_norm = use_scale_shift_norm
 
         self.in_layers = nn.Sequential(
-            normalization(channels),
+            normalization(channels), # GroupNorm32(32, channels); GroupNorm32(32, 128, eps=1e-05, affine=True) TODO
             SiLU(),
             conv_nd(dims, channels, self.out_channels, 3, padding=1),
         )
+        '''
+        Sequential(
+          (0): GroupNorm32(32, 128, eps=1e-05, affine=True)
+          (1): SiLU()
+          (2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        )
+        '''
+
         self.emb_layers = nn.Sequential(
             SiLU(),
             linear(
@@ -153,6 +161,13 @@ class ResBlock(TimestepBlock):
                 2 * self.out_channels if use_scale_shift_norm else self.out_channels,
             ),
         )
+        '''
+        Sequential(
+          (0): SiLU()
+          (1): Linear(in_features=512, out_features=256, bias=True)
+        )
+        '''
+
         self.out_layers = nn.Sequential(
             normalization(self.out_channels),
             SiLU(),
@@ -161,15 +176,44 @@ class ResBlock(TimestepBlock):
                 conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)
             ),
         )
+        '''
+        Sequential(
+          (0): GroupNorm32(32, 128, eps=1e-05, affine=True)
+          (1): SiLU()
+          (2): Dropout(p=0.0, inplace=False)
+          (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        )
+        '''
 
         if self.out_channels == channels:
-            self.skip_connection = nn.Identity()
+            self.skip_connection = nn.Identity() # NOTE, here, Identity()
         elif use_conv:
             self.skip_connection = conv_nd(
                 dims, channels, self.out_channels, 3, padding=1
             )
         else:
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
+
+        '''
+        ResBlock(
+          (in_layers): Sequential(
+            (0): GroupNorm32(32, 128, eps=1e-05, affine=True)
+            (1): SiLU()
+            (2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          )
+          (emb_layers): Sequential(
+            (0): SiLU()
+            (1): Linear(in_features=512, out_features=256, bias=True)
+          )
+          (out_layers): Sequential(
+            (0): GroupNorm32(32, 128, eps=1e-05, affine=True)
+            (1): SiLU()
+            (2): Dropout(p=0.0, inplace=False)
+            (3): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          )
+          (skip_connection): Identity()
+        )
+        '''
 
     def forward(self, x, emb):
         """
@@ -208,15 +252,18 @@ class AttentionBlock(nn.Module):
     """
 
     def __init__(self, channels, num_heads=1, use_checkpoint=False):
+        # channels=384, num_heads=4, use_checkpoint=False
+
         super().__init__()
         self.channels = channels
         self.num_heads = num_heads
         self.use_checkpoint = use_checkpoint
 
-        self.norm = normalization(channels)
-        self.qkv = conv_nd(1, channels, channels * 3, 1)
-        self.attention = QKVAttention()
+        self.norm = normalization(channels) # GroupNorm32(32, 384, eps=1e-05, affine=True)
+        self.qkv = conv_nd(1, channels, channels * 3, 1) # Conv1d(384, 1152, kernel_size=(1,), stride=(1,)) NOTE 这个的实现代码，有意思
+        self.attention = QKVAttention() # NOTE 这个没有自己的构造函数. 
         self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
+        '''Conv1d(384, 384, kernel_size=(1,), stride=(1,))'''
 
     def forward(self, x):
         return checkpoint(self._forward, (x,), self.parameters(), self.use_checkpoint)
@@ -304,74 +351,90 @@ class UNetModel(nn.Module):
 
     def __init__(
         self,
-        in_channels,
-        model_channels,
-        out_channels,
-        num_res_blocks,
-        attention_resolutions,
-        dropout=0,
-        channel_mult=(1, 2, 4, 8),
-        conv_resample=True,
-        dims=2,
-        num_classes=None,
-        use_checkpoint=False,
-        num_heads=1,
-        num_heads_upsample=-1,
-        use_scale_shift_norm=False,
+        in_channels, # 3
+        model_channels, # 128
+        out_channels, # 6
+        num_res_blocks, # 3
+        attention_resolutions, # (4, 8)
+        dropout=0, # 0.0
+        channel_mult=(1, 2, 4, 8), # (1, 2, 3, 4)
+        conv_resample=True, # True
+        dims=2, # 2
+        num_classes=None, # 1000
+        use_checkpoint=False, # False
+        num_heads=1, # 4
+        num_heads_upsample=-1, # -1
+        use_scale_shift_norm=False, # True
     ):
         super().__init__()
 
         if num_heads_upsample == -1:
-            num_heads_upsample = num_heads
+            num_heads_upsample = num_heads # 4
 
-        self.in_channels = in_channels
-        self.model_channels = model_channels
-        self.out_channels = out_channels
-        self.num_res_blocks = num_res_blocks
-        self.attention_resolutions = attention_resolutions
-        self.dropout = dropout
-        self.channel_mult = channel_mult
-        self.conv_resample = conv_resample
-        self.num_classes = num_classes
-        self.use_checkpoint = use_checkpoint
-        self.num_heads = num_heads
-        self.num_heads_upsample = num_heads_upsample
+        self.in_channels = in_channels # 3
+        self.model_channels = model_channels # 128
+        self.out_channels = out_channels # 6
+        self.num_res_blocks = num_res_blocks # 3
+        self.attention_resolutions = attention_resolutions # (4,8)
+        self.dropout = dropout # 0.0
+        self.channel_mult = channel_mult # (1, 2, 3, 4)
+        self.conv_resample = conv_resample # True
+        self.num_classes = num_classes # 1000
+        self.use_checkpoint = use_checkpoint # False
+        self.num_heads = num_heads # 4
+        self.num_heads_upsample = num_heads_upsample # -1
 
-        time_embed_dim = model_channels * 4
+        time_embed_dim = model_channels * 4 # 128 * 4 = 512
         self.time_embed = nn.Sequential(
-            linear(model_channels, time_embed_dim), # model_channels -> time_embed_dim
+            linear(model_channels, time_embed_dim), # model_channels 128 -> time_embed_dim 512
             SiLU(),
-            linear(time_embed_dim, time_embed_dim), # time_embed_dim -> time_embed_dim
+            linear(time_embed_dim, time_embed_dim), # time_embed_dim 512 -> time_embed_dim 512
         )
+        ''' 对时间t的embedding: 
+        Sequential(
+          (0): Linear(in_features=128, out_features=512, bias=True)
+          (1): SiLU()
+          (2): Linear(in_features=512, out_features=512, bias=True)
+        )
+        '''
 
         if self.num_classes is not None:
-            self.label_emb = nn.Embedding(num_classes, time_embed_dim)
+            self.label_emb = nn.Embedding(num_classes, time_embed_dim) # (1000, 512) 这是对1000个标签进行embeddig matrix的操作. 
+        '''对分类标签的embedding: Embedding(1000, 512)'''
 
         self.input_blocks = nn.ModuleList( # Unet的左边的那部分
             [
-                TimestepEmbedSequential(
+                TimestepEmbedSequential( # 这个TimestepEmbedSequential的构造函数，啥也没有 NOTE
                     conv_nd(dims, in_channels, model_channels, 3, padding=1) # kernel-size=3,
                 )
             ] # 列表
         )
-        input_block_chans = [model_channels]
-        ch = model_channels
+        ''' 初始转换图片的操作，从channel = 3 to 128
+        ModuleList(
+          (0): TimestepEmbedSequential(
+            (0): Conv2d(3, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+          )
+        )
+        '''
+
+        input_block_chans = [model_channels] # [128]
+        ch = model_channels # 128
         ds = 1
-        for level, mult in enumerate(channel_mult):
-            for _ in range(num_res_blocks):
+        for level, mult in enumerate(channel_mult): # (1, 2, 3, 4)
+            for _ in range(num_res_blocks): # 3; 算下来就是4*3 = 12层
                 layers = [
                     ResBlock( # 1
-                        ch,
-                        time_embed_dim, # time embed
+                        ch, # 128, |||, 
+                        time_embed_dim, # time embed, 512
                         dropout,
-                        out_channels=mult * model_channels, # 通道数目在扩大
-                        dims=dims,
+                        out_channels=mult * model_channels, # 通道数目在扩大 128, |||, 
+                        dims=dims, # 2 ||| 
                         use_checkpoint=use_checkpoint,
                         use_scale_shift_norm=use_scale_shift_norm,
                     )
                 ]
                 ch = mult * model_channels
-                if ds in attention_resolutions: # ds = down sampling，下采样的比例
+                if ds in attention_resolutions: # (4, 8); ds = down sampling，下采样的比例
                     layers.append(
                         AttentionBlock( # NOTE attention block
                             ch, use_checkpoint=use_checkpoint, num_heads=num_heads
@@ -385,6 +448,46 @@ class UNetModel(nn.Module):
                 )
                 input_block_chans.append(ch)
                 ds *= 2
+
+        '''
+        起头：    (0): Conv2d(3, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        level=0, mult=1; ds=1 [4]
+            0-th
+               一个res block: in_layers, emb_layers, out_layers
+            1-th
+               一个res block: in_layers, emb_layers, out_layers
+            2-th
+               一个res block: in_layers, emb_layers, out_layers
+            追加一个down sample
+
+        level=1, mult=2; ds=2 [4]
+            0-th
+               一个res block: in_layers, emb_layers, out_layers
+            1-th
+               一个res block: in_layers, emb_layers, out_layers
+            2-th
+               一个res block: in_layers, emb_layers, out_layers
+            追加一个down sample
+
+        level=2, mult=3; ds=4 [4]
+            0-th
+               一个res block: in_layers, emb_layers, out_layers; 后面追加一个attention block
+            1-th
+               一个res block: in_layers, emb_layers, out_layers; 后面追加一个attention block
+            2-th
+               一个res block: in_layers, emb_layers, out_layers; 后面追加一个attention block
+            追加一个down sample
+
+        level=3, mult=4; ds=8 [3]
+            0-th
+               一个res block: in_layers, emb_layers, out_layers; 后面追加一个attention block
+            1-th
+               一个res block: in_layers, emb_layers, out_layers; 后面追加一个attention block
+            2-th
+               一个res block: in_layers, emb_layers, out_layers; 后面追加一个attention block
+
+        from 0-th to 15-th, which are 16 blocks in total
+        '''
 
         self.middle_block = TimestepEmbedSequential(
             ResBlock(
@@ -405,9 +508,14 @@ class UNetModel(nn.Module):
                 use_scale_shift_norm=use_scale_shift_norm,
             ),
         )
+        '''
+        一个resblock
+        一个attention block
+        一个resblock
+        '''
 
         self.output_blocks = nn.ModuleList([])
-        for level, mult in list(enumerate(channel_mult))[::-1]:
+        for level, mult in list(enumerate(channel_mult))[::-1]: # 3,4; 2,3; 1,2; 0,1
             for i in range(num_res_blocks + 1):
                 layers = [
                     ResBlock(
@@ -433,12 +541,69 @@ class UNetModel(nn.Module):
                     layers.append(Upsample(ch, conv_resample, dims=dims))
                     ds //= 2
                 self.output_blocks.append(TimestepEmbedSequential(*layers))
+        '''
+        level=3, mult=4, ds=8, i=0,1,2,3
+            i=0,
+                res block, attention block
+            i=1,
+                res block, attention block
+            i=2,
+                res block, attention block
+            i=3,
+                res block, attention block, TODO up sample 增加一个上采样，注意这个上采样的位置！
+
+        level=2, mult=3, ds=4, i=0,1,2,3
+            i=0,
+                res block, attention block
+            i=1,
+                res block, attention block
+            i=2,
+                res block, attention block
+            i=3,
+                res block, attention block, TODO up sample 增加一个上采样，注意这个上采样的位置！
+
+        level=1, mult=2, ds=2, i=0,1,2,3
+            i=0,
+                res block
+            i=1,
+                res block
+            i=2,
+                res block
+            i=3,
+                res block, TODO up sample 增加一个上采样，注意这个上采样的位置！
+
+        level=0, mult=1, ds=1, i=0,1,2,3
+            (12) i=0,
+                res block
+            (13) i=1,
+                res block
+            (14) i=2,
+                res block
+            (15) i=3,
+                res block
+        '''
 
         self.out = nn.Sequential(
             normalization(ch),
             SiLU(),
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
+        '''
+        Sequential(
+          (0): GroupNorm32(32, 128, eps=1e-05, affine=True)
+          (1): SiLU()
+          (2): Conv2d(128, 6, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        )
+        '''
+
+        ''' 整体：
+        1 time_embed
+        2 label_embed
+        3 input_blocks
+        4 middle_block
+        5 output_blocks
+        6 out
+        '''
 
     def convert_to_fp16(self):
         """
@@ -467,9 +632,9 @@ class UNetModel(nn.Module):
         """
         Apply the model to an input batch.
 
-        :param x: an [N x C x ...] Tensor of inputs.
-        :param timesteps: a 1-D batch of timesteps.
-        :param y: an [N] Tensor of labels, if class-conditional.
+        :param x: an [N x C x ...] Tensor of inputs. e.g., x.shape=[1, 3, 64, 64]
+        :param timesteps: a 1-D batch of timesteps. e.g., timesteps=tensor([700.2500], device='cuda:0')
+        :param y: an [N] Tensor of labels, if class-conditional. e.g., y=tensor([1], device='cuda:0')
         :return: an [N x C x ...] Tensor of outputs.
         """
         import ipdb; ipdb.set_trace()
@@ -477,23 +642,68 @@ class UNetModel(nn.Module):
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
 
-        hs = []
-        emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+        hs = [] # hidden layer output tensors
+        emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) # timesteps=700.25, self.model_channels=128
 
         if self.num_classes is not None:
             assert y.shape == (x.shape[0],)
-            emb = emb + self.label_emb(y)
+            emb = emb + self.label_emb(y) # [1, 512]
 
-        h = x.type(self.inner_dtype)
+        h = x.type(self.inner_dtype) # h.shape=[1, 3, 64, 64]
+
+        import ipdb; ipdb.set_trace()
         for module in self.input_blocks:
             h = module(h, emb)
             hs.append(h)
+
+        # 0-th, [1, 3, 64, 64], [1, 512] -> [1, 128, 64, 64] # NOTE
+        # 1-th, (torch.Size([1, 128, 64, 64]), torch.Size([1, 512])) -> torch.Size([1, 128, 64, 64])
+        # 2-th, (torch.Size([1, 128, 64, 64]), torch.Size([1, 512])) -> torch.Size([1, 128, 64, 64])
+        # 3-th, (torch.Size([1, 128, 64, 64]), torch.Size([1, 512])) -> torch.Size([1, 128, 64, 64])
+        # 4-th, (torch.Size([1, 128, 64, 64]), torch.Size([1, 512])) -> torch.Size([1, 128, 32, 32]) # NOTE
+        # 5-th, (torch.Size([1, 128, 32, 32]), torch.Size([1, 512])) -> torch.Size([1, 256, 32, 32]) # NOTE
+        # 6-th, (torch.Size([1, 256, 32, 32]), torch.Size([1, 512])) -> torch.Size([1, 256, 32, 32])
+        # 7-th, (torch.Size([1, 256, 32, 32]), torch.Size([1, 512])) -> torch.Size([1, 256, 32, 32])
+        # 8-th, (torch.Size([1, 256, 32, 32]), torch.Size([1, 512])) -> torch.Size([1, 256, 16, 16]) # NOTE
+        # 9-th, (torch.Size([1, 256, 16, 16]), torch.Size([1, 512])) -> torch.Size([1, 384, 16, 16]) # NOTE 
+        # 10-th, (torch.Size([1, 384, 16, 16]), torch.Size([1, 512])) -> torch.Size([1, 384, 16, 16]) 
+        # 11-th, (torch.Size([1, 384, 16, 16]), torch.Size([1, 512])) -> torch.Size([1, 384, 16, 16]) 
+        # 12-th, (torch.Size([1, 384, 16, 16]), torch.Size([1, 512])) -> torch.Size([1, 384, 8, 8]) # NOTE
+        # 13-th, (torch.Size([1, 384, 8, 8]), torch.Size([1, 512])) -> torch.Size([1, 512, 8, 8]) # NOTE
+        # 14-th, (torch.Size([1, 512, 8, 8]), torch.Size([1, 512])) -> torch.Size([1, 512, 8, 8]) 
+        # 15-th, (torch.Size([1, 512, 8, 8]), torch.Size([1, 512])) -> torch.Size([1, 512, 8, 8]) 
+
+        import ipdb; ipdb.set_trace()
         h = self.middle_block(h, emb)
+        # (torch.Size([1, 512, 8, 8]), torch.Size([1, 512])) -> torch.Size([1, 512, 8, 8]) 
+        import ipdb; ipdb.set_trace()
         for module in self.output_blocks:
             cat_in = th.cat([h, hs.pop()], dim=1)
             h = module(cat_in, emb)
         h = h.type(x.dtype)
-        return self.out(h)
+        # 0-th, h=[1, 512, 8, 8], cat_in=[1, 1024, 8, 8], out.h=[1, 512, 8, 8]
+        # 1-th, h=[1, 512, 8, 8], cat_in=[1, 1024, 8, 8], out.h=[1, 512, 8, 8]
+        # 2-th, h=[1, 512, 8, 8], cat_in=[1, 1024, 8, 8], out.h=[1, 512, 8, 8]
+        
+        # 3-th, h=[1, 512, 8, 8], cat_in=[1, 896, 8, 8], out.h=[1, 512, 16, 16] NOTE
+        # 4-th, h=[1, 512, 16, 16], cat_in=[1, 896, 16, 16], out.h=[1, 384, 16, 16] NOTE
+        # 5-th, h=[1, 384, 16, 16], cat_in=[1, 768, 16, 16], out.h=[1, 384, 16, 16] NOTE
+        # 6-th, h=[1, 384, 16, 16], cat_in=[1, 768, 16, 16], out.h=[1, 384, 16, 16] 
+
+        # 7-th, h=[1, 384, 16, 16], cat_in=[1, 640, 16, 16], out.h=[1, 384, 32, 32] 
+        # 8-th, h=[1, 384, 32, 32], cat_in=[1, 640, 32, 32], out.h=[1, 256, 32, 32] 
+        # 9-th, h=[1, 256, 32, 32], cat_in=[1, 512, 32, 32], out.h=[1, 256, 32, 32] 
+        # 10-th, h=[1, 256, 32, 32], cat_in=[1, 512, 32, 32], out.h=[1, 256, 32, 32] 
+
+        # 11-th, h=[1, 256, 32, 32], cat_in=[1, 384, 32, 32], out.h=[1, 256, 64, 64] NOTE 
+        # 12-th, h=[1, 256, 64, 64], cat_in=[1, 384, 64, 64], out.h=[1, 128, 64, 64] NOTE 
+        # 13-th, h=[1, 128, 64, 64], cat_in=[1, 256, 64, 64], out.h=[1, 128, 64, 64]  
+        # 14-th, h=[1, 128, 64, 64], cat_in=[1, 256, 64, 64], out.h=[1, 128, 64, 64]  
+
+        # 15-th, h=[1, 128, 64, 64], cat_in=[1, 256, 64, 64], out.h=[1, 128, 64, 64]  
+
+        import ipdb; ipdb.set_trace()
+        return self.out(h) # h=[1, 128, 64, 64] to -> [1, 6, 64, 64] for what? TODO
 
     def get_feature_vectors(self, x, timesteps, y=None):
         """

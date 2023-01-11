@@ -9,13 +9,13 @@ def create_named_schedule_sampler(name, diffusion):
     """
     Create a ScheduleSampler from a library of pre-defined samplers.
 
-    :param name: the name of the sampler.
+    :param name: the name of the sampler. E.g., 'loss-second-moment'
     :param diffusion: the diffusion object to sample for.
     """
     if name == "uniform":
         return UniformSampler(diffusion)
     elif name == "loss-second-moment":
-        return LossSecondMomentResampler(diffusion)
+        return LossSecondMomentResampler(diffusion) # NOTE 这个非常重要
     else:
         raise NotImplementedError(f"unknown schedule sampler: {name}")
 
@@ -49,14 +49,14 @@ class ScheduleSampler(ABC):
                  - timesteps: a tensor of timestep indices.
                  - weights: a tensor of weights to scale the resulting losses.
         """
-        w = self.weights()
+        import ipdb; ipdb.set_trace()
+        w = self.weights() # 4000个1, array([1., 1., 1., ..., 1., 1., 1.])
         p = w / np.sum(w)
-        indices_np = np.random.choice(len(p), size=(batch_size,), p=p)
-        indices = th.from_numpy(indices_np).long().to(device)
-        weights_np = 1 / (len(p) * p[indices_np])
-        weights = th.from_numpy(weights_np).float().to(device)
-        return indices, weights
-
+        indices_np = np.random.choice(len(p), size=(batch_size,), p=p) # e.g., array([2801]), sample of time t
+        indices = th.from_numpy(indices_np).long().to(device) # tensor([2801], device='cuda:0')
+        weights_np = 1 / (len(p) * p[indices_np]) # 1 / (4000 * 0.00025) = 1.0
+        weights = th.from_numpy(weights_np).float().to(device) # tensor([1.], device='cuda:0')
+        return indices, weights # 2801, 1.0, both in cuda:0 now
 
 class UniformSampler(ScheduleSampler):
     def __init__(self, diffusion):
@@ -122,14 +122,14 @@ class LossAwareSampler(ScheduleSampler):
 
 
 class LossSecondMomentResampler(LossAwareSampler):
-    def __init__(self, diffusion, history_per_term=10, uniform_prob=0.001):
+    def __init__(self, diffusion, history_per_term=10, uniform_prob=0.001): # diffusion=<improved_diffusion.respace.SpacedDiffusion object at 0x7f4f51296250>, history_per_term=10, uniform_prob=0.001
         self.diffusion = diffusion
-        self.history_per_term = history_per_term
-        self.uniform_prob = uniform_prob
+        self.history_per_term = history_per_term # 10
+        self.uniform_prob = uniform_prob # 0.001
         self._loss_history = np.zeros(
             [diffusion.num_timesteps, history_per_term], dtype=np.float64
-        )
-        self._loss_counts = np.zeros([diffusion.num_timesteps], dtype=np.int)
+        ) # 保存的是损失函数的历史取值, (4000, 10)
+        self._loss_counts = np.zeros([diffusion.num_timesteps], dtype=np.int) # (4000,)
 
     def weights(self):
         if not self._warmed_up():

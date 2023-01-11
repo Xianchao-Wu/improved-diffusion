@@ -20,24 +20,24 @@ SETUP_RETRY_COUNT = 3
 
 def setup_dist():
     """
-    Setup a distributed process group.
+    Setup a distributed process group. 分布式训练处理group，不必看
     """
     if dist.is_initialized():
         return
 
-    comm = MPI.COMM_WORLD
-    backend = "gloo" if not th.cuda.is_available() else "nccl"
+    comm = MPI.COMM_WORLD # <mpi4py.MPI.Intracomm object at 0x7f78fb0e1570>
+    backend = "gloo" if not th.cuda.is_available() else "nccl" # 'nccl'
 
     if backend == "gloo":
         hostname = "localhost"
     else:
-        hostname = socket.gethostbyname(socket.getfqdn())
-    os.environ["MASTER_ADDR"] = comm.bcast(hostname, root=0)
-    os.environ["RANK"] = str(comm.rank)
-    os.environ["WORLD_SIZE"] = str(comm.size)
+        hostname = socket.gethostbyname(socket.getfqdn()) # '172.17.0.3'
+    os.environ["MASTER_ADDR"] = comm.bcast(hostname, root=0) # '172.17.0.3'
+    os.environ["RANK"] = str(comm.rank) # '0'
+    os.environ["WORLD_SIZE"] = str(comm.size) # '1'
 
-    port = comm.bcast(_find_free_port(), root=0)
-    os.environ["MASTER_PORT"] = str(port)
+    port = comm.bcast(_find_free_port(), root=0) # 45133
+    os.environ["MASTER_PORT"] = str(port) # '45133'
     dist.init_process_group(backend=backend, init_method="env://")
 
 
@@ -69,7 +69,7 @@ def sync_params(params):
     """
     for p in params:
         with th.no_grad():
-            dist.broadcast(p, 0)
+            dist.broadcast(p, 0) # NOTE 这是从一个gpu传递到其他的gpu了
 
 
 def _find_free_port():
