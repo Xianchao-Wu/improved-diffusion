@@ -85,10 +85,10 @@ def scale_module(module, scale):
 
 def mean_flat(tensor):
     """
-    Take the mean over all non-batch dimensions.
+    Take the mean over all non-batch dimensions. 取batch之外的维度的所有维度的均值
     """
     return tensor.mean(dim=list(range(1, len(tensor.shape))))
-
+    # e.g., [1, 3, 64, 64] -> [1], which is alike: tensor([0.0010], device='cuda:0', grad_fn=<MeanBackward1>)
 
 def normalization(channels):
     """

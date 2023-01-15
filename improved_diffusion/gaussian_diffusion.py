@@ -229,17 +229,17 @@ class GaussianDiffusion:
         """
         import ipdb; ipdb.set_trace()
         assert x_start.shape == x_t.shape
-        posterior_mean = (
+        posterior_mean = ( # NOTE 这是兜兜转转的结果：model -> epsilon -> 计算predicted_x_0 -> 计算mean, 均值；整个流程很有意思！ -> shape=[1, 3, 64, 64]
             _extract_into_tensor(self.posterior_mean_coef1, t, x_t.shape) * x_start
             + _extract_into_tensor(self.posterior_mean_coef2, t, x_t.shape) * x_t
-        ) # 公式(10), posterior_mean.shape=[1, 3, 64, 64]
-        
+        ) # 公式(11), posterior_mean.shape=[1, 3, 64, 64]
+        # 系数1 * x_0 + 系数2*x_t = 后验分布的mean 
         # 事先计算好了，直接拿一下就好了: NOTE
         posterior_variance = _extract_into_tensor(self.posterior_variance, t, x_t.shape)
-        # [1, 3, 64, 64]
+        # [1, 3, 64, 64], 后验分布的方差，直接取，已经事先计算好了
         posterior_log_variance_clipped = _extract_into_tensor(
             self.posterior_log_variance_clipped, t, x_t.shape
-        ) # [1, 3, 64, 64]
+        ) # [1, 3, 64, 64], 后验分布的方差的对数，直接取，已经事先计算好了
         assert (
             posterior_mean.shape[0]
             == posterior_variance.shape[0]
@@ -247,7 +247,7 @@ class GaussianDiffusion:
             == x_start.shape[0]
         )
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
-        # 后验分布的，均值和方差; all in the shape of [1, 3, 64, 64]
+        # 后验分布的，均值, 方差, 以及方差的对数; all in the shape of [1, 3, 64, 64]
 
     def p_mean_variance(
         self, model, x, t, clip_denoised=True, denoised_fn=None, model_kwargs=None
@@ -282,29 +282,29 @@ class GaussianDiffusion:
 
         B, C = x.shape[:2] # B=batch.size=1, C=channel.size=3
         assert t.shape == (B,)
-        model_output = model(x, self._scale_timesteps(t), **model_kwargs) # NOTE 调用model forward函数！
+        model_output = model(x, self._scale_timesteps(t), **model_kwargs) # NOTE 调用model forward函数！ x(=x_t).shape=[1, 3, 64, 64], t=time, and class='1' is in 'model_kwargs', model_output.shape=[1, 6, 64, 64] 就是单个tensor, for mean and variance prediction
         import ipdb; ipdb.set_trace()
         # 得到方差和对数方差
         if self.model_var_type in [ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
             # 可学习的方差
-            assert model_output.shape == (B, C * 2, *x.shape[2:]) # 2*C, 均值和方差
-            model_output, model_var_values = th.split(model_output, C, dim=1) # 分割一下，第二部分是和方差相关的
+            assert model_output.shape == (B, C * 2, *x.shape[2:]) # 2*C=6, 均值和方差
+            model_output, model_var_values = th.split(model_output, C, dim=1) # 分割一下，第二部分是和方差相关的, 这两个是预测出来的“均值”和“方差". NOTE
             # 下面是两种预测方差的方法：
             if self.model_var_type == ModelVarType.LEARNED:
                 # 直接预测方差
                 model_log_variance = model_var_values # 预测的是 对数方差
                 model_variance = th.exp(model_log_variance)
             else:
-                # 预测方差插值的系数
+                # 预测方差插值的系数, NOTE in here, LEARNED_RANGE
                 # 预测的范围是[-1, 1]之间, 公式(14)，log_beta, log_beta_bar (公式(9)), log_beta_bar < log_beta
                 min_log = _extract_into_tensor(
                     self.posterior_log_variance_clipped, t, x.shape
-                )
-                max_log = _extract_into_tensor(np.log(self.betas), t, x.shape)
+                ) # (4000,) -> t=2801 -> torch.Size([1, 3, 64, 64]), 取值都是-6.4735，是后验概率的对数方差，t=2801时刻的.
+                max_log = _extract_into_tensor(np.log(self.betas), t, x.shape) # self.betas.shape=(4000,), t=2801, max_log= -6.4731, all in shape=[1, 3, 64, 64]
                 # The model_var_values is [-1, 1] for [min_var, max_var].
-                frac = (model_var_values + 1) / 2 # [-1, 1] to [0, 1]
-                model_log_variance = frac * max_log + (1 - frac) * min_log # frac = v
-                model_variance = th.exp(model_log_variance) # NOTE
+                frac = (model_var_values + 1) / 2 # [-1, 1] to [0, 1], frac.shape=[1, 3, 64, 64]
+                model_log_variance = frac * max_log + (1 - frac) * min_log # frac = v, NOTE 这就是论文中说的，要预测的是frac=v=weight，在max_log(beta相关)和min_log(后验分布的对数方差)之间搞个插值, Equation (15)
+                model_variance = th.exp(model_log_variance) # NOTE, Equation (15) 中的exp
         else:
             # 不可学习的方差
             model_variance, model_log_variance = {
@@ -323,11 +323,11 @@ class GaussianDiffusion:
             model_log_variance = _extract_into_tensor(model_log_variance, t, x.shape)
 
         def process_xstart(x):
-            if denoised_fn is not None:
+            if denoised_fn is not None: # denoised_fn=None
                 x = denoised_fn(x)
-            if clip_denoised:
+            if clip_denoised: # False
                 return x.clamp(-1, 1)
-            return x
+            return x # so, just return the original x, x.shape=[1, 3, 64, 64]
 
         if self.model_mean_type == ModelMeanType.PREVIOUS_X:
             # case1: 预测x[t-1]的期望值 NOTE
@@ -340,13 +340,13 @@ class GaussianDiffusion:
                 # case2: 预测x[0]的期望值 NOTE
                 pred_xstart = process_xstart(model_output)
             else:
-                # case3: 预测eps的期望值 NOTE
+                # case3: 预测eps的期望值 NOTE, here, TODO
                 pred_xstart = process_xstart(
                     self._predict_xstart_from_eps(x_t=x, t=t, eps=model_output)
-                )
+                ) # 有意思，model_output来自原来model产出的[1, 6, 64, 64]的前半部分，即[1, 3, 64, 64] NOTE, 这个会根据self.model_mean_type的枚举类型，来决定其是具体哪种东西，这里是ModelMeanType.EPSILON: 3
             model_mean, _, _ = self.q_posterior_mean_variance( # 这是根据公式(10)来计算出来的
                 x_start=pred_xstart, x_t=x, t=t
-            )
+            ) # predicted_x0, x_t, and t as inputs
         else:
             raise NotImplementedError(self.model_mean_type)
 
@@ -354,15 +354,15 @@ class GaussianDiffusion:
             model_mean.shape == model_log_variance.shape == pred_xstart.shape == x.shape
         )
         return {
-            "mean": model_mean,
-            "variance": model_variance,
-            "log_variance": model_log_variance,
-            "pred_xstart": pred_xstart,
+            "mean": model_mean, # 模型的均值, [1, 3, 64, 64], Model -> epsilon -> x_0 -> mu (predicted mean)
+            "variance": model_variance, # 插值得到的方差，[1, 3, 64, 64]
+            "log_variance": model_log_variance, # 插值得到的对数方差，[1, 3, 64, 64]
+            "pred_xstart": pred_xstart, # 预测出来的x_0 , [1, 3, 64, 64]
         }
 
     def _predict_xstart_from_eps(self, x_t, t, eps):
         import ipdb; ipdb.set_trace()
-        # 从预测出来的噪声，去预测x_0? NOTE, 论文中的公式(12) 相当于说，是从带噪声的x_t中，擦去噪声，复原得到原来的x_0。
+        # 从预测出来的噪声，去预测x_0? 是的! NOTE, 论文中的公式(12) 相当于说，是从带噪声的x_t中，"擦去噪声" TODO，复原得到原来的x_0。
         # equation (9)的变形：
         # x_0 = (x_t - sqrt (1 - alpha_t_bar) * epsilon)/(sqrt alpha_t_bar)
 
@@ -712,36 +712,36 @@ class GaussianDiffusion:
                  - 'pred_xstart': the x_0 predictions.
         """
         import ipdb; ipdb.set_trace()
-        # 真实的x[0], x[t]和t，去计算出x[t-1]的均值与方差
+        # 扩散过程里面的：真实的x[0], x[t]和t，去计算出x[t-1]的均值与方差
         true_mean, _, true_log_variance_clipped = self.q_posterior_mean_variance(
             x_start=x_start, x_t=x_t, t=t
         ) # true_mean and true_log_variance_clipped.shape = [1, 3, 64, 64]
-        # x[t]，t和预测出来的x[0]，去计算出x[t-1]的均值与方差，放入out
+        # x[t]，t和预测出来的x[0]，去计算出x[t-1]的均值与方差，放入out. 'mean', 'variance', 'log_variance', 'pred_xstart' 一共四个key，value.shape都是[1. 3, 64, 64]
         out = self.p_mean_variance(
             model, x_t, t, clip_denoised=clip_denoised, model_kwargs=model_kwargs
-        ) # clip_denoised=False, model_kwargs={'y': tensor([1], device='cuda:0')}
+        ) # clip_denoised=False, model_kwargs={'y': tensor([1], device='cuda:0')} NOTE
 
         # p_theta与q，这两个分布之间的kl散度
         # 对应着L[t-1]损失函数：
         kl = normal_kl(
             true_mean, true_log_variance_clipped, out["mean"], out["log_variance"] # NOTE, 两个高斯分布之间的kl散度！真实的均值，真实的方差；以及，预测出来的均值，预测出来的方差.
         )
-        kl = mean_flat(kl) / np.log(2.0) # 得到的是bit per dimension的loss NOTE
+        kl = mean_flat(kl) / np.log(2.0) # 得到的是bit per dimension的loss NOTE, kl.shape=[1], e.g., tensor([0.0014], device='cuda:0', grad_fn=<DivBackward0>)
 
         # 对应着L[0]损失函数： TODO, 公式5，用累计分布的差分(微小距离的差分)，来模拟一个离散的分布... what?
         decoder_nll = -discretized_gaussian_log_likelihood(
             x_start, means=out["mean"], log_scales=0.5 * out["log_variance"]
-        ) # x_1 to x_0, 这个名字有意思，decoder nll! NOTE, 负对数似然
+        ) # x_1 to x_0, 这个名字有意思，decoder nll! NOTE, "离散化的", 负对数似然. x_start.shape=[1. 3, 64, 64], means.shape=[1, 3, 64, 64], log_scales.shape=[1, 3, 64, 64]
         assert decoder_nll.shape == x_start.shape
-        decoder_nll = mean_flat(decoder_nll) / np.log(2.0) # binary per dimension? bit per dimension?
+        decoder_nll = mean_flat(decoder_nll) / np.log(2.0) # binary per dimension? bit per dimension? from [1, 3, 64, 64] to tensor([34.7698], device='cuda:0', grad_fn=<DivBackward0>) 
 
         # At the first timestep return the decoder NLL,
         # otherwise return KL(q(x_{t-1}|x_t,x_0) || p(x_{t-1}|x_t))
-        # t = 0时刻，用离散的高斯分布去计算似然
+        # t = 0时刻，用离散的高斯分布, 去近似计算似然
         # t > 0时刻，直接用kl散度: NOTE
-        output = th.where((t == 0), decoder_nll, kl) # 当t=0的时候，返回decoder_nll；当t!=0的时候，返回kl。
+        output = th.where((t == 0), decoder_nll, kl) # 当t=0的时候，返回decoder_nll；当t!=0的时候，返回kl。decoder_nll=tensor([34.7698], device='cuda:0', grad_fn=<DivBackward0>); kl=tensor([0.0014], device='cuda:0', grad_fn=<DivBackward0>)
         return {"output": output, "pred_xstart": out["pred_xstart"]}
-
+        # output.shape=[1], pred_xstart=[1, 3, 64, 64]
     def training_losses(self, model, x_start, t, model_kwargs=None, noise=None):
         """
         Compute training losses for a single timestep.
@@ -759,7 +759,7 @@ class GaussianDiffusion:
         # 我们需要这个函数来确定，最后有哪些loss被使用来train NOTE
         if model_kwargs is None:
             model_kwargs = {} # not in here
-        if noise is None:
+        if noise is None: # in
             noise = th.randn_like(x_start) # -> noise.shape=[1, 3, 64, 64]
         x_t = self.q_sample(x_start, t, noise=noise) # NOTE 从x_0跳跃到x_t，一步炸楼的多层
         # x_t.shape = [1, 3, 64, 64]，中间的废墟
@@ -767,15 +767,15 @@ class GaussianDiffusion:
 
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
             terms["loss"] = self._vb_terms_bpd( # NOTE here, <LossType.RESCALED_KL: 4>
-                model=model,
-                x_start=x_start,
-                x_t=x_t,
-                t=t,
+                model=model, # <class 'improved_diffusion.respace._WrappedModel'>
+                x_start=x_start, # [1, 3, 64, 64]
+                x_t=x_t, # [1, 3, 64, 64]
+                t=t, # tensor([2801], device='cuda:0')
                 clip_denoised=False,
                 model_kwargs=model_kwargs, # {'y': tensor([1], device='cuda:0')}
-            )["output"]
+            )["output"] # decoder_nll(t=0) or kl between q and p. NOTE
             if self.loss_type == LossType.RESCALED_KL:
-                terms["loss"] *= self.num_timesteps # NOTE 论文中的设置，乘以一个weight = num-timesteps
+                terms["loss"] *= self.num_timesteps # NOTE 论文中的设置，乘以一个weight = num-timesteps=4000; from tensor([0.0014], device='cuda:0', grad_fn=<SWhereBackward0>) to tensor([5.5593], device='cuda:0', grad_fn=<MulBackward0>) by 0.0014*4000 = 5.5593
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
             model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
 
@@ -818,7 +818,7 @@ class GaussianDiffusion:
         else:
             raise NotImplementedError(self.loss_type)
         import ipdb; ipdb.set_trace()
-        return terms
+        return terms # {'loss': tensor([5.5593], device='cuda:0', grad_fn=<MulBackward0>)}
 
     def _prior_bpd(self, x_start):
         """

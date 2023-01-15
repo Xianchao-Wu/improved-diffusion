@@ -77,8 +77,8 @@ class LossAwareSampler(ScheduleSampler):
         This method will perform synchronization to make sure all of the ranks
         maintain the exact same reweighting.
 
-        :param local_ts: an integer Tensor of timesteps.
-        :param local_losses: a 1D Tensor of losses.
+        :param local_ts: an integer Tensor of timesteps. e.g., tensor([2801], device='cuda:0')
+        :param local_losses: a 1D Tensor of losses. e.g., tensor([5.5593], device='cuda:0')
         """
         batch_sizes = [
             th.tensor([0], dtype=th.int32, device=local_ts.device)
@@ -102,7 +102,7 @@ class LossAwareSampler(ScheduleSampler):
         ]
         losses = [x.item() for y, bs in zip(loss_batches, batch_sizes) for x in y[:bs]]
         self.update_with_all_losses(timesteps, losses)
-
+        # timesteps=[2801], losses=[5.559330940246582]
     @abstractmethod
     def update_with_all_losses(self, ts, losses):
         """
@@ -142,13 +142,13 @@ class LossSecondMomentResampler(LossAwareSampler):
 
     def update_with_all_losses(self, ts, losses):
         for t, loss in zip(ts, losses):
-            if self._loss_counts[t] == self.history_per_term:
+            if self._loss_counts[t] == self.history_per_term: # self.history_per_term=10，每个t时间点上，最多保存十个loss value! 
                 # Shift out the oldest loss term.
                 self._loss_history[t, :-1] = self._loss_history[t, 1:]
                 self._loss_history[t, -1] = loss
             else:
-                self._loss_history[t, self._loss_counts[t]] = loss
-                self._loss_counts[t] += 1
+                self._loss_history[t, self._loss_counts[t]] = loss # (4000, 10), 一共4000个time points，每个timepoint上放10个值.
+                self._loss_counts[t] += 1 # loss的数量增加1
 
     def _warmed_up(self):
         return (self._loss_counts == self.history_per_term).all()

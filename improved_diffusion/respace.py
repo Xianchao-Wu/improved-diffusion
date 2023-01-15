@@ -130,6 +130,7 @@ class _WrappedModel:
         import ipdb; ipdb.set_trace()
         return self.model(x, new_ts, **kwargs) # NOTE forward
         # x.shape = [1, 3, 64, 64]
-        # new_ts = tensor([700.2500], device='cuda:0')
+        # new_ts = tensor([700.2500], device='cuda:0') 对时间缩放，从0-4000到0-1000了。
         # kwargs = {'y': tensor([1], device='cuda:0')}
-
+        
+        # out.shape = [1, 6, 64, 64], first 3 for mean and next 3 for variance

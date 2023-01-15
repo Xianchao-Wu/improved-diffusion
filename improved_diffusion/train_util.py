@@ -219,15 +219,15 @@ class TrainLoop:
                     losses = compute_losses()
 
             if isinstance(self.schedule_sampler, LossAwareSampler):
-                self.schedule_sampler.update_with_local_losses(
+                self.schedule_sampler.update_with_local_losses( # NOTE in
                     t, losses["loss"].detach()
                 )
             import ipdb; ipdb.set_trace()
-            loss = (losses["loss"] * weights).mean()
+            loss = (losses["loss"] * weights).mean() # TODO 这个weights都有哪些可能的取值呢?
             log_loss_dict(
                 self.diffusion, t, {k: v * weights for k, v in losses.items()}
             )
-            if self.use_fp16:
+            if self.use_fp16: # False, not in
                 loss_scale = 2 ** self.lg_loss_scale
                 (loss * loss_scale).backward()
             else:

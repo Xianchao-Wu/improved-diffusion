@@ -37,8 +37,8 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     A sequential module that passes timestep embeddings to the children that
     support it as an extra input.
     """
-
     def forward(self, x, emb):
+        import ipdb; ipdb.set_trace() # for each block in input-block, middle-block and output-block! in unet.
         # x = x_t
         # emb = time embed or condition embed
         for layer in self:
@@ -642,32 +642,35 @@ class UNetModel(nn.Module):
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
 
-        hs = [] # hidden layer output tensors
+        hs = [] # hidden layer output tensors, 保存input_blocks的各个block的输出
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels)) # timesteps=700.25, self.model_channels=128
 
-        if self.num_classes is not None:
+        if self.num_classes is not None: # 1000, in
             assert y.shape == (x.shape[0],)
-            emb = emb + self.label_emb(y) # [1, 512]
+            emb = emb + self.label_emb(y) # [1, 512], 重要，这是对class label做embedding! NOTE, emb.shape=[1, 512]
 
-        h = x.type(self.inner_dtype) # h.shape=[1, 3, 64, 64]
+        h = x.type(self.inner_dtype) # h.shape=[1, 3, 64, 64], self.inner_dtype=torch.float32, 该方法的功能是: 当不指定dtype时,返回类型. 当指定dtype时 NOTE (目前在这里),返回类型转换后的数据,如果类型已经符合要求, 那么不做额外的复制,返回原对象. 
 
         import ipdb; ipdb.set_trace()
-        for module in self.input_blocks:
-            h = module(h, emb)
+        for module in self.input_blocks: # 16个blocks
+            h = module(h, emb) # NOTE, 需要注意的是，这里的emb，已经包括了time.emb + class.emb!
             hs.append(h)
 
         # 0-th, [1, 3, 64, 64], [1, 512] -> [1, 128, 64, 64] # NOTE
         # 1-th, (torch.Size([1, 128, 64, 64]), torch.Size([1, 512])) -> torch.Size([1, 128, 64, 64])
         # 2-th, (torch.Size([1, 128, 64, 64]), torch.Size([1, 512])) -> torch.Size([1, 128, 64, 64])
         # 3-th, (torch.Size([1, 128, 64, 64]), torch.Size([1, 512])) -> torch.Size([1, 128, 64, 64])
+
         # 4-th, (torch.Size([1, 128, 64, 64]), torch.Size([1, 512])) -> torch.Size([1, 128, 32, 32]) # NOTE
         # 5-th, (torch.Size([1, 128, 32, 32]), torch.Size([1, 512])) -> torch.Size([1, 256, 32, 32]) # NOTE
         # 6-th, (torch.Size([1, 256, 32, 32]), torch.Size([1, 512])) -> torch.Size([1, 256, 32, 32])
         # 7-th, (torch.Size([1, 256, 32, 32]), torch.Size([1, 512])) -> torch.Size([1, 256, 32, 32])
+
         # 8-th, (torch.Size([1, 256, 32, 32]), torch.Size([1, 512])) -> torch.Size([1, 256, 16, 16]) # NOTE
         # 9-th, (torch.Size([1, 256, 16, 16]), torch.Size([1, 512])) -> torch.Size([1, 384, 16, 16]) # NOTE 
         # 10-th, (torch.Size([1, 384, 16, 16]), torch.Size([1, 512])) -> torch.Size([1, 384, 16, 16]) 
         # 11-th, (torch.Size([1, 384, 16, 16]), torch.Size([1, 512])) -> torch.Size([1, 384, 16, 16]) 
+
         # 12-th, (torch.Size([1, 384, 16, 16]), torch.Size([1, 512])) -> torch.Size([1, 384, 8, 8]) # NOTE
         # 13-th, (torch.Size([1, 384, 8, 8]), torch.Size([1, 512])) -> torch.Size([1, 512, 8, 8]) # NOTE
         # 14-th, (torch.Size([1, 512, 8, 8]), torch.Size([1, 512])) -> torch.Size([1, 512, 8, 8]) 
@@ -704,7 +707,7 @@ class UNetModel(nn.Module):
 
         import ipdb; ipdb.set_trace()
         return self.out(h) # h=[1, 128, 64, 64] to -> [1, 6, 64, 64] for what? TODO
-
+        # 6, first 3 for mean and next 3 for variance (all prediction)
     def get_feature_vectors(self, x, timesteps, y=None):
         """
         Apply the model and return all of the intermediate tensors.
