@@ -96,8 +96,8 @@ class TrainLoop:
         import ipdb; ipdb.set_trace()
 
         if th.cuda.is_available():
-            self.use_ddp = True # TODO here now...
-            # TODO for debug, do not use DDP
+            self.use_ddp = True # NOTE here now...
+            # for debug, do not use DDP
             debug = True
             self.ddp_model = DDP(
                 self.model,
@@ -202,7 +202,7 @@ class TrainLoop:
                 for k, v in cond.items()
             } # {'y': tensor([1], device='cuda:0')}
             last_batch = (i + self.microbatch) >= batch.shape[0] # True, last_micro_batch (in current batch)
-            t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev()) # NOTE, 这是采样出来一个t，以及weights, dist_util.dev()="device(type='cuda', index=0)"
+            t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev()) # NOTE, 这是采样出来一个t=[2801, 3376, ...] 取值是0到4000，以及weights=[1., 1., ...]，目前这个都是1了. dist_util.dev()="device(type='cuda', index=0)"
             import ipdb; ipdb.set_trace()
             compute_losses = functools.partial(
                 self.diffusion.training_losses,
@@ -213,7 +213,7 @@ class TrainLoop:
             )
 
             if last_batch or not self.use_ddp:
-                losses = compute_losses() # NOTE
+                losses = compute_losses() # NOTE, here
             else:
                 with self.ddp_model.no_sync():
                     losses = compute_losses()
@@ -223,7 +223,7 @@ class TrainLoop:
                     t, losses["loss"].detach()
                 )
             import ipdb; ipdb.set_trace()
-            loss = (losses["loss"] * weights).mean() # TODO 这个weights都有哪些可能的取值呢?
+            loss = (losses["loss"] * weights).mean() # NOTE 这个weights都有哪些可能的取值呢? 目前都是1., ..., 1.
             log_loss_dict(
                 self.diffusion, t, {k: v * weights for k, v in losses.items()}
             )
@@ -290,7 +290,7 @@ class TrainLoop:
                     th.save(state_dict, f)
 
         save_checkpoint(0, self.master_params)
-        for rate, params in zip(self.ema_rate, self.ema_params):
+        for rate, params in zip(self.ema_rate, self.ema_params): # e.g., self.ema_rate=0.9999
             save_checkpoint(rate, params)
 
         if dist.get_rank() == 0:

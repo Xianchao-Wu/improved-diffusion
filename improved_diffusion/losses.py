@@ -46,6 +46,8 @@ def approx_standard_normal_cdf(x):
     """
     return 0.5 * (1.0 + th.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * th.pow(x, 3))))
     # x.shape=[1, 3, 64, 64]; out.shape=[1, 3, 64, 64]
+
+
 # NOTE 这个方法完全是新知识：TODO
 def discretized_gaussian_log_likelihood(x, *, means, log_scales):
     """
@@ -86,3 +88,4 @@ def discretized_gaussian_log_likelihood(x, *, means, log_scales):
     )
     assert log_probs.shape == x.shape
     return log_probs # 最后返回的是，对数似然, log_probs.shape=[1, 3, 64, 64]
+

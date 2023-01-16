@@ -56,7 +56,7 @@ class ScheduleSampler(ABC):
         indices = th.from_numpy(indices_np).long().to(device) # tensor([2801], device='cuda:0')
         weights_np = 1 / (len(p) * p[indices_np]) # 1 / (4000 * 0.00025) = 1.0
         weights = th.from_numpy(weights_np).float().to(device) # tensor([1.], device='cuda:0')
-        return indices, weights # 2801, 1.0, both in cuda:0 now
+        return indices, weights # 2801, 1.0, both in cuda:0 now; e.g., indices=[2801, ...], weights=[1., ...]
 
 class UniformSampler(ScheduleSampler):
     def __init__(self, diffusion):

@@ -26,7 +26,7 @@ def get_named_beta_schedule(schedule_name, num_diffusion_timesteps): # 'cosine',
     """
     import ipdb; ipdb.set_trace()
     if schedule_name == "linear":
-        # 线性的，增长的 TODO，Linear schedule from Ho et al, extended to work for any number of
+        # 线性的，增长的 Linear schedule from Ho et al, extended to work for any number of
         # diffusion steps.
         scale = 1000 / num_diffusion_timesteps
         beta_start = scale * 0.0001
@@ -34,7 +34,7 @@ def get_named_beta_schedule(schedule_name, num_diffusion_timesteps): # 'cosine',
         return np.linspace(
             beta_start, beta_end, num_diffusion_timesteps, dtype=np.float64
         )
-    elif schedule_name == "cosine": # TODO 余弦的加噪方案, 论文中的公式16
+    elif schedule_name == "cosine": # NOTE, in here, NOTE 余弦的加噪方案, 论文中的公式16
         return betas_for_alpha_bar(
             num_diffusion_timesteps, # 4000
             lambda t: math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2,
@@ -62,7 +62,7 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
         t2 = (i + 1) / num_diffusion_timesteps # for 'i+1'
         betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
     return np.array(betas)
-    # TODO beta_t = 1 - alpha_bar_t/alpha_bar_tm1
+    # NOTE beta_t = 1 - alpha_bar_t/alpha_bar_tm1
     # alpha_bar_t = f(t)/f(0)
     # alpha_bar_tm1 = f(t-1)/f(0)
     # alpha_bar_t/alpha_bar_tm1 = f(t)/f(t-1)
@@ -218,7 +218,7 @@ class GaussianDiffusion:
             _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
             + _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
             * noise
-        ) # TODO 这里是调用了ddpm里面的一步炸楼的公式！ x_t = sqrt(alpha_t_bar) * x_0 + sqrt(1-alpha_t_bar)*noise
+        ) # NOTE 这里是调用了ddpm里面的一步炸楼的公式！ x_t = sqrt(alpha_t_bar) * x_0 + sqrt(1-alpha_t_bar)*noise
         # 需要注意的是，_extract_info_tensor是从一个tensor中，按照t，来抽取一个“切片”而已。
     def q_posterior_mean_variance(self, x_start, x_t, t):
         """
@@ -340,7 +340,7 @@ class GaussianDiffusion:
                 # case2: 预测x[0]的期望值 NOTE
                 pred_xstart = process_xstart(model_output)
             else:
-                # case3: 预测eps的期望值 NOTE, here, TODO
+                # case3: 预测eps的期望值 NOTE, here 
                 pred_xstart = process_xstart(
                     self._predict_xstart_from_eps(x_t=x, t=t, eps=model_output)
                 ) # 有意思，model_output来自原来model产出的[1, 6, 64, 64]的前半部分，即[1, 3, 64, 64] NOTE, 这个会根据self.model_mean_type的枚举类型，来决定其是具体哪种东西，这里是ModelMeanType.EPSILON: 3
@@ -362,7 +362,7 @@ class GaussianDiffusion:
 
     def _predict_xstart_from_eps(self, x_t, t, eps):
         import ipdb; ipdb.set_trace()
-        # 从预测出来的噪声，去预测x_0? 是的! NOTE, 论文中的公式(12) 相当于说，是从带噪声的x_t中，"擦去噪声" TODO，复原得到原来的x_0。
+        # 从预测出来的噪声，去预测x_0? 是的! NOTE, 论文中的公式(12) 相当于说，是从带噪声的x_t中，"擦去噪声" ，复原得到原来的x_0。
         # equation (9)的变形：
         # x_0 = (x_t - sqrt (1 - alpha_t_bar) * epsilon)/(sqrt alpha_t_bar)
 
@@ -386,11 +386,11 @@ class GaussianDiffusion:
 
     def _predict_eps_from_xstart(self, x_t, t, pred_xstart):
         import ipdb; ipdb.set_trace()
-        # 从x_0来预测epsilon TODO for what? 是对公式(8)的反推。
-        # 即从x_0到x_t，加的噪声是多少。 tnt的量级。
+        # 从x_0以及给定的x_t，来预测epsilon, for what? 是对公式(8)的反推。
+        # 即预测的是：从x_0到x_t，加的噪声是多少。 tnt的量级。
 
         # x_t = eps * sqrt(1-alpha_t_bar) + sqrt(alpha_t_bar) * x_0
-        # eps = (1/sqrt(alpha_t_bar)*x_t - x_0)/sqrt(1/alpha_t_bar - 1) TODO 这块的公式，需要自己推导...
+        # eps = (1/sqrt(alpha_t_bar)*x_t - x_0)/sqrt(1/alpha_t_bar - 1)  这块的公式，需要自己推导...
         return (
             _extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
             - pred_xstart
@@ -720,7 +720,7 @@ class GaussianDiffusion:
         out = self.p_mean_variance(
             model, x_t, t, clip_denoised=clip_denoised, model_kwargs=model_kwargs
         ) # clip_denoised=False, model_kwargs={'y': tensor([1], device='cuda:0')} NOTE
-
+        # NOTE, out is a dict, 'mean':model_mean, 模型p的均值；'variance': p分布的方差, 'log_variance': p分布的对数方差； 'pred_xstart': 预测出来的x_0.
         # p_theta与q，这两个分布之间的kl散度
         # 对应着L[t-1]损失函数：
         kl = normal_kl(

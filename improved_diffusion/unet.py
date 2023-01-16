@@ -38,7 +38,7 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     support it as an extra input.
     """
     def forward(self, x, emb):
-        import ipdb; ipdb.set_trace() # for each block in input-block, middle-block and output-block! in unet.
+        #import ipdb; ipdb.set_trace() # for each block in input-block, middle-block and output-block! in unet.
         # x = x_t
         # emb = time embed or condition embed
         for layer in self:
@@ -142,7 +142,7 @@ class ResBlock(TimestepBlock):
         self.use_scale_shift_norm = use_scale_shift_norm
 
         self.in_layers = nn.Sequential(
-            normalization(channels), # GroupNorm32(32, channels); GroupNorm32(32, 128, eps=1e-05, affine=True) TODO
+            normalization(channels), # GroupNorm32(32, channels); GroupNorm32(32, 128, eps=1e-05, affine=True) NOTE
             SiLU(),
             conv_nd(dims, channels, self.out_channels, 3, padding=1),
         )
@@ -224,7 +224,7 @@ class ResBlock(TimestepBlock):
         :return: an [N x C x ...] Tensor of outputs.
         """
         return checkpoint(
-            self._forward, (x, emb), self.parameters(), self.use_checkpoint # TODO need time embedding
+            self._forward, (x, emb), self.parameters(), self.use_checkpoint # NOTE need time embedding
         )
 
     def _forward(self, x, emb):
@@ -550,7 +550,7 @@ class UNetModel(nn.Module):
             i=2,
                 res block, attention block
             i=3,
-                res block, attention block, TODO up sample 增加一个上采样，注意这个上采样的位置！
+                res block, attention block, NOTE up sample 增加一个上采样，注意这个上采样的位置！
 
         level=2, mult=3, ds=4, i=0,1,2,3
             i=0,
@@ -560,7 +560,7 @@ class UNetModel(nn.Module):
             i=2,
                 res block, attention block
             i=3,
-                res block, attention block, TODO up sample 增加一个上采样，注意这个上采样的位置！
+                res block, attention block, NOTE up sample 增加一个上采样，注意这个上采样的位置！
 
         level=1, mult=2, ds=2, i=0,1,2,3
             i=0,
@@ -570,7 +570,7 @@ class UNetModel(nn.Module):
             i=2,
                 res block
             i=3,
-                res block, TODO up sample 增加一个上采样，注意这个上采样的位置！
+                res block, NOTE up sample 增加一个上采样，注意这个上采样的位置！
 
         level=0, mult=1, ds=1, i=0,1,2,3
             (12) i=0,
@@ -706,7 +706,7 @@ class UNetModel(nn.Module):
         # 15-th, h=[1, 128, 64, 64], cat_in=[1, 256, 64, 64], out.h=[1, 128, 64, 64]  
 
         import ipdb; ipdb.set_trace()
-        return self.out(h) # h=[1, 128, 64, 64] to -> [1, 6, 64, 64] for what? TODO
+        return self.out(h) # h=[1, 128, 64, 64] to -> [1, 6, 64, 64] for what? NOTE
         # 6, first 3 for mean and next 3 for variance (all prediction)
     def get_feature_vectors(self, x, timesteps, y=None):
         """

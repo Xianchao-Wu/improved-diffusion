@@ -72,9 +72,9 @@ class SpacedDiffusion(GaussianDiffusion):
     def __init__(self, use_timesteps, **kwargs): # dict_keys(['betas', 'model_mean_type'=epsilon:3, 'model_var_type=learned_range:4', 'loss_type:rescaled_kl:4', 'rescale_timesteps=True']) for 'kwargs'!
         import ipdb; ipdb.set_trace()
         self.use_timesteps = set(use_timesteps) # {0, 1, ..., 3999}
-        self.timestep_map = [] # TODO, 是连续的，还是跳跃式的(spaced的)
+        self.timestep_map = [] # NOTE, 是连续的，还是跳跃式的(spaced的)
         self.original_num_steps = len(kwargs["betas"]) # 做多少步的加噪, 4000
-        import ipdb; ipdb.set_trace() # TODO
+        import ipdb; ipdb.set_trace() # 
         base_diffusion = GaussianDiffusion(**kwargs)  # pylint: disable=missing-kwoa
         last_alpha_cumprod = 1.0
         new_betas = []
@@ -84,18 +84,18 @@ class SpacedDiffusion(GaussianDiffusion):
                 last_alpha_cumprod = alpha_cumprod
                 self.timestep_map.append(i)
         kwargs["betas"] = np.array(new_betas) # 对betas求和=15.210434270813122; 对new_betas求和：15.210434270813133; 两者基本没有变化... NOTE
-        super().__init__(**kwargs) # TODO, why, call __init__ again? Line 78已经call过了啊... 主要原因：因为betas -> new_betas了，有可能修改了betas，所以这里重新计算了从betas, alphas，到其他所有的一共14个变量。NOTE okay.
+        super().__init__(**kwargs) # NOTE, why, call __init__ again? Line 78已经call过了啊... 主要原因：因为betas -> new_betas了，有可能修改了betas，所以这里重新计算了从betas, alphas，到其他所有的一共14个变量。NOTE okay.
 
     def p_mean_variance(
         self, model, *args, **kwargs
-    ):  # pylint: disable=signature-differs TODO
+    ):  # pylint: disable=signature-differs 
         import ipdb; ipdb.set_trace()
         return super().p_mean_variance(self._wrap_model(model), *args, **kwargs)
         # model is already "_WrappedModel", so just return 'model'
     def training_losses(
         self, model, *args, **kwargs
     ):  # pylint: disable=signature-differs
-        # TODO, 根据传入的loss type的不同，得到不同的损失函数
+        # NOTE, 根据传入的loss type的不同，得到不同的损失函数
         import ipdb; ipdb.set_trace()
         # kl loss, mse loss, and so on
         return super().training_losses(self._wrap_model(model), *args, **kwargs)

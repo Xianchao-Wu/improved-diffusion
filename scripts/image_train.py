@@ -35,7 +35,7 @@ def main():
     seed = 666
     set_rand_seed(666)
 
-    args = create_argparser().parse_args() # 各种控制参数的“汇总” TODO step 1, type(args) = <class 'argparse.Namespace'>
+    args = create_argparser().parse_args() # 各种控制参数的“汇总” NOTE step 1, type(args) = <class 'argparse.Namespace'>
 
     dist_util.setup_dist() # 分布式计算的一些配置，目前不看细节 TODO
     logger.configure() # Logging to /tmp/openai-2023-01-07-23-30-56-035823
@@ -43,7 +43,7 @@ def main():
     import ipdb; ipdb.set_trace()
     logger.log("creating model and diffusion...")
     model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys()) # TODO 创建model和diffusion对象 step 2
+        **args_to_dict(args, model_and_diffusion_defaults().keys()) # NOTE` 创建model和diffusion对象 step 2
     )
     model.to(dist_util.dev()) # device(type='cuda', index=0)
 

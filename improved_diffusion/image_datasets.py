@@ -53,7 +53,7 @@ def load_data(
     import ipdb; ipdb.set_trace()
     while True:
         yield from loader
-    # TODO why can not in 'load_data' in ipdb mode? strange
+    # NOTE why can not in 'load_data' in ipdb mode? strange -> okay now
     # 有意思，去掉上面的两行，yield就可以了，先debug了再说！！！
 
 def _list_image_files_recursively(data_dir):
@@ -66,7 +66,7 @@ def _list_image_files_recursively(data_dir):
         elif bf.isdir(full_path):
             results.extend(_list_image_files_recursively(full_path))
     return results # 找到了50000张图片, e.g., '/workspace/asr/diffusion_models/improved-diffusion/datasets/cifar_train/bird_00006.png'
-    # 遍历到所有的图片类型。 TODO
+    # 遍历到所有的图片类型。 
 
 class ImageDataset(Dataset):
     def __init__(self, resolution, image_paths, classes=None, shard=0, num_shards=1):
@@ -80,7 +80,7 @@ class ImageDataset(Dataset):
         return len(self.local_images)
 
     def __getitem__(self, idx):
-        import ipdb; ipdb.set_trace()
+        #import ipdb; ipdb.set_trace()
         path = self.local_images[idx]
         with bf.BlobFile(path, "rb") as f:
             pil_image = Image.open(f)
@@ -98,7 +98,7 @@ class ImageDataset(Dataset):
         pil_image = pil_image.resize(
             tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC
         ) # 这是把原来的图片，原地放大到原来的二倍.
-        # 图片做一些归一化, TODO
+        # 图片做一些归一化, 
         arr = np.array(pil_image.convert("RGB")) # (64, 64, 3)
         crop_y = (arr.shape[0] - self.resolution) // 2 # 0
         crop_x = (arr.shape[1] - self.resolution) // 2 # 0

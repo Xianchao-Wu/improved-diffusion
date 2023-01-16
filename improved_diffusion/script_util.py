@@ -44,7 +44,7 @@ def create_model_and_diffusion(
     num_res_blocks, # 3
     num_heads, # 4
     num_heads_upsample, # -1
-    attention_resolutions, # 在哪些block上做attention? TODO; '16,8'
+    attention_resolutions, # 在哪些block上做attention? NOTE; '16,8'
     dropout, # 0.0
     diffusion_steps, # 4000
     noise_schedule, # 'cosine'
@@ -69,7 +69,7 @@ def create_model_and_diffusion(
         num_heads_upsample=num_heads_upsample, # -1
         use_scale_shift_norm=use_scale_shift_norm, # True
         dropout=dropout, # 0.0
-    ) # TODO 创建模型，主要是对UNet的初始化，左边16层，右边16层，中间3层。
+    ) # NOTE 创建模型，主要是对UNet的初始化，左边16层，右边16层，中间3层。
 
     import ipdb; ipdb.set_trace() # 开始初始化diffusion
     diffusion = create_gaussian_diffusion(
@@ -82,7 +82,7 @@ def create_model_and_diffusion(
         rescale_timesteps=rescale_timesteps, # True
         rescale_learned_sigmas=rescale_learned_sigmas, # True
         timestep_respacing=timestep_respacing, # ''
-    ) # TODO 创建"扩散过程"
+    ) # NOTE 创建"扩散过程"
 
     import ipdb; ipdb.set_trace()
     return model, diffusion
@@ -246,7 +246,7 @@ def create_gaussian_diffusion(
 ):
     # 生成扩散的框架
     import ipdb; ipdb.set_trace()
-    betas = gd.get_named_beta_schedule(noise_schedule, steps) # determine beta schedule
+    betas = gd.get_named_beta_schedule(noise_schedule, steps) # determine beta schedule, e.g., betas=[9.87e-06, 1.02e-05, , ...,0.556, 0.75, 0.999]是从小到大的一个顺序, 取值是在0到1之间.
 
     if use_kl: # True
         loss_type = gd.LossType.RESCALED_KL # <LossType.RESCALED_KL: 4> NOTE, here
@@ -288,7 +288,7 @@ def add_dict_to_argparser(parser, default_dict):
 
 def args_to_dict(args, keys):
     return {k: getattr(args, k) for k in keys}
-    # args: 大的超参数的集合； Namespace(attention_resolutions='16,8', batch_size=128, class_cond=True, data_dir='/workspace/asr/diffusion_models/improved-diffusion/datasets/cifar_train', diffusion_steps=4000, dropout=0.0, ema_rate='0.9999', fp16_scale_growth=0.001, image_size=64, learn_sigma=True, log_interval=10, lr=0.0001, lr_anneal_steps=0, microbatch=-1, noise_schedule='cosine', num_channels=128, num_heads=4, num_heads_upsample=-1, num_res_blocks=3, predict_xstart=False, rescale_learned_sigmas=True, rescale_timesteps=True, resume_checkpoint='', save_interval=10000, schedule_sampler='loss-second-moment', sigma_small=False, timestep_respacing='', use_checkpoint=False, use_fp16=False, use_kl=True, use_scale_shift_norm=True, weight_decay=0.0); TODO len(keys)=19, -> dict_keys(['image_size', 'num_channels', 'num_res_blocks', 'num_heads', 'num_heads_upsample', 'attention_resolutions', 'dropout', 'learn_sigma', 'sigma_small', 'class_cond', 'diffusion_steps', 'noise_schedule', 'timestep_respacing', 'use_kl', 'predict_xstart', 'rescale_timesteps', 'rescale_learned_sigmas', 'use_checkpoint', 'use_scale_shift_norm']) NOTE return={'attention_resolutions': '16,8', 'class_cond': True, 'diffusion_steps': 4000, 'dropout': 0.0, ...}
+    # args: 大的超参数的集合； Namespace(attention_resolutions='16,8', batch_size=128, class_cond=True, data_dir='/workspace/asr/diffusion_models/improved-diffusion/datasets/cifar_train', diffusion_steps=4000, dropout=0.0, ema_rate='0.9999', fp16_scale_growth=0.001, image_size=64, learn_sigma=True, log_interval=10, lr=0.0001, lr_anneal_steps=0, microbatch=-1, noise_schedule='cosine', num_channels=128, num_heads=4, num_heads_upsample=-1, num_res_blocks=3, predict_xstart=False, rescale_learned_sigmas=True, rescale_timesteps=True, resume_checkpoint='', save_interval=10000, schedule_sampler='loss-second-moment', sigma_small=False, timestep_respacing='', use_checkpoint=False, use_fp16=False, use_kl=True, use_scale_shift_norm=True, weight_decay=0.0); NOTE len(keys)=19, -> dict_keys(['image_size', 'num_channels', 'num_res_blocks', 'num_heads', 'num_heads_upsample', 'attention_resolutions', 'dropout', 'learn_sigma', 'sigma_small', 'class_cond', 'diffusion_steps', 'noise_schedule', 'timestep_respacing', 'use_kl', 'predict_xstart', 'rescale_timesteps', 'rescale_learned_sigmas', 'use_checkpoint', 'use_scale_shift_norm']) NOTE return={'attention_resolutions': '16,8', 'class_cond': True, 'diffusion_steps': 4000, 'dropout': 0.0, ...}
 
 def str2bool(v):
     """
