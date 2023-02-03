@@ -17,7 +17,7 @@ from .losses import normal_kl, discretized_gaussian_log_likelihood
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps): # 'cosine', 4000
     """
-    Get a pre-defined beta schedule for the given name. 一个加噪的方案.
+    Get a pre-defined beta schedule for the given name. 一个加噪的方案. 指名生成linear或者cosine类型的betas.
 
     The beta schedule library consists of beta schedules which remain similar
     in the limit of num_diffusion_timesteps.
@@ -34,10 +34,10 @@ def get_named_beta_schedule(schedule_name, num_diffusion_timesteps): # 'cosine',
         return np.linspace(
             beta_start, beta_end, num_diffusion_timesteps, dtype=np.float64
         )
-    elif schedule_name == "cosine": # NOTE, in here, NOTE 余弦的加噪方案, 论文中的公式16
+    elif schedule_name == "cosine": # NOTE, in here, NOTE 余弦的加噪方案, 论文中的公式17
         return betas_for_alpha_bar(
             num_diffusion_timesteps, # 4000
-            lambda t: math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2,
+            lambda t: math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2, # s=0.008 问题，单独建立一个函数，不香吗，为啥要搞一个lambda匿名函数呢... NOTE 这是为啥?
         )
     else:
         raise NotImplementedError(f"unknown beta schedule: {schedule_name}")
@@ -46,12 +46,12 @@ def get_named_beta_schedule(schedule_name, num_diffusion_timesteps): # 'cosine',
 def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
     """
     Create a beta schedule that discretizes the given alpha_t_bar function,
-    which defines the cumulative product of (1-beta) over time from t = [0,1].
+    which defines the cumulative product of (1-beta) over time from t = [0,1]. 用来生成“余弦类型的betas”的函数.
 
     :param num_diffusion_timesteps: the number of betas to produce.
     :param alpha_bar: a lambda that takes an argument t from 0 to 1 and
                       produces the cumulative product of (1-beta) up to that
-                      part of the diffusion process.
+                      part of the diffusion process. 有意思，这里的alpha_bar是一个匿名函数而已... <function get_named_beta_schedule.<locals>.<lambda> at 0x7f6b54088670>
     :param max_beta: the maximum beta to use; use values lower than 1 to
                      prevent singularities.
     """
@@ -60,7 +60,7 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
     for i in range(num_diffusion_timesteps): # 4000
         t1 = i / num_diffusion_timesteps # for 'i'
         t2 = (i + 1) / num_diffusion_timesteps # for 'i+1'
-        betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
+        betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta)) # NOTE 这里是调用匿名函数, <function get_named_beta_schedule.<locals>.<lambda> at 0x7f6b54088670>
     return np.array(betas)
     # NOTE beta_t = 1 - alpha_bar_t/alpha_bar_tm1
     # alpha_bar_t = f(t)/f(0)
@@ -72,7 +72,7 @@ class ModelMeanType(enum.Enum):
     """
     Which type of output the model predicts.
     """
-
+    # 模型预测的三种类型，枚举: 预测x_{t-1}，或者x_0，或者epsilon。三种.
     PREVIOUS_X = enum.auto()  # the model predicts x_{t-1}
     START_X = enum.auto()  # the model predicts x_0
     EPSILON = enum.auto()  # the model predicts epsilon
@@ -85,7 +85,7 @@ class ModelVarType(enum.Enum):
     The LEARNED_RANGE option has been added to allow the model to predict
     values between FIXED_SMALL and FIXED_LARGE, making its job easier.
     """
-
+    # 模型的“方差”的三种类型：目前是learned_range，对log_betas和posterior_log_variance的一个插值。
     LEARNED = enum.auto()
     FIXED_SMALL = enum.auto()
     FIXED_LARGE = enum.auto()
@@ -99,8 +99,8 @@ class LossType(enum.Enum):
     )  # use raw MSE loss (with RESCALED_KL when learning variances)
     KL = enum.auto()  # use the variational lower-bound
     RESCALED_KL = enum.auto()  # like KL, but rescale to estimate the full VLB
-
-    def is_vb(self):
+    ''' 损失函数，四个枚举类型'''
+    def is_vb(self): # this method, is_vb is not used...
         return self == LossType.KL or self == LossType.RESCALED_KL
 
 
@@ -124,11 +124,11 @@ class GaussianDiffusion:
     def __init__(
         self,
         *, # 这个*, 有意思！ NOTE
-        betas, # 4000
-        model_mean_type, # <ModelMeanType.EPSILON: 3>
-        model_var_type, # <ModelVarType.LEARNED_RANGE: 4>
-        loss_type, # <LossType.RESCALED_KL: 4>
-        rescale_timesteps=False, # True
+        betas, # 长度为4000的一个数组
+        model_mean_type, # <ModelMeanType.EPSILON: 3> p分布的“均值”的类型
+        model_var_type, # <ModelVarType.LEARNED_RANGE: 4>， p分布的“方差”的类型
+        loss_type, # <LossType.RESCALED_KL: 4>，损失函数的类型
+        rescale_timesteps=False, # True，例如，从t=[0, 4000]到t=[0, 1000]
     ):
         import ipdb; ipdb.set_trace()
         self.model_mean_type = model_mean_type # <ModelMeanType.EPSILON: 3>
@@ -176,12 +176,12 @@ class GaussianDiffusion:
             * np.sqrt(alphas)
             / (1.0 - self.alphas_cumprod)
         ) # 后验分布的“均值”的第二个系数，公式(10)里面的，x_t的系数
-
+        # 上面是14个种类的“前向扩散”的相关的“量”.
 
     def q_mean_variance(self, x_start, t):
         """
         Get the distribution q(x_t | x_0). 扩散的前向过程的分布。论文中的公式(8), 从x_0一步跳跃到x_t。
-
+        即，根据x_0和当前的和t相关的“炸药量”，来炸楼！一步从x_0到x_t。这里是获取x_t的均值和方差. 分布相关的。
         :param x_start: the [N x C x ...] tensor of noiseless inputs. 无噪声的输入x_0
         :param t: the number of diffusion steps (minus 1). Here, 0 means one step.
         :return: A tuple (mean, variance, log_variance), all of x_start's shape.
@@ -203,7 +203,7 @@ class GaussianDiffusion:
         """
         Diffuse the data for a given number of diffusion steps.
 
-        In other words, sample from q(x_t | x_0). 做采样的。对论文中的公式(8)进行的重参数的过程. 一次炸好几层的楼.
+        In other words, sample from q(x_t | x_0). 做采样的。对论文中的公式(8)进行的重参数的过程. 一次炸好几层的楼. 这是具体的采样。 NOTE
 
         :param x_start: the initial data batch. e.g., [1, 3, 64, 64]
         :param t: the number of diffusion steps (minus 1). Here, 0 means one step. e.g., tensor([2801], device='cuda:0')
@@ -222,7 +222,7 @@ class GaussianDiffusion:
         # 需要注意的是，_extract_info_tensor是从一个tensor中，按照t，来抽取一个“切片”而已。
     def q_posterior_mean_variance(self, x_start, x_t, t):
         """
-        Compute the mean and variance of the diffusion posterior:
+        Compute the mean and variance of the diffusion posterior: 扩散过程的“后验分布”的均值和方差，分布相关
 
             q(x_{t-1} | x_t, x_0)， 计算论文中的公式9，10.
             x_start: x_0, [1, 3, 64, 64]; x_t: [1, 3, 64, 64]; t=tensor([2801], device='cuda:0') 
@@ -322,7 +322,7 @@ class GaussianDiffusion:
             model_variance = _extract_into_tensor(model_variance, t, x.shape)
             model_log_variance = _extract_into_tensor(model_log_variance, t, x.shape)
 
-        def process_xstart(x):
+        def process_xstart(x): # NOTE 目前没啥操作
             if denoised_fn is not None: # denoised_fn=None
                 x = denoised_fn(x)
             if clip_denoised: # False
@@ -354,10 +354,10 @@ class GaussianDiffusion:
             model_mean.shape == model_log_variance.shape == pred_xstart.shape == x.shape
         )
         return {
-            "mean": model_mean, # 模型的均值, [1, 3, 64, 64], Model -> epsilon -> x_0 -> mu (predicted mean)
-            "variance": model_variance, # 插值得到的方差，[1, 3, 64, 64]
-            "log_variance": model_log_variance, # 插值得到的对数方差，[1, 3, 64, 64]
-            "pred_xstart": pred_xstart, # 预测出来的x_0 , [1, 3, 64, 64]
+            "mean": model_mean, # 模型的均值, [1, 3, 64, 64], Model -> epsilon -> x_0 -> mu (predicted mean) for p(x_t-1|x_t)
+            "variance": model_variance, # 插值得到的方差，[1, 3, 64, 64], for p(x_t-1|x_t)
+            "log_variance": model_log_variance, # 插值得到的对数方差，[1, 3, 64, 64], for p(x_t-1|x_t)
+            "pred_xstart": pred_xstart, # 预测出来的x_0 , [1, 3, 64, 64], predicted_x_0
         }
 
     def _predict_xstart_from_eps(self, x_t, t, eps):
@@ -372,9 +372,9 @@ class GaussianDiffusion:
             - _extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * eps
         )
 
-    def _predict_xstart_from_xprev(self, x_t, t, xprev):
+    def _predict_xstart_from_xprev(self, x_t, t, xprev): # NOTE xprev = model's predicted mean of p(x_t-1|x_t)
         import ipdb; ipdb.set_trace()
-        # 从x_t-1去预测出来x_0, NOTE , 论文中的公式(10)
+        # 从x_t-1的均值mean，去预测出来x_0, NOTE , 论文中的公式(10)
         assert x_t.shape == xprev.shape
         return (  # (xprev - coef2*x_t) / coef1
             _extract_into_tensor(1.0 / self.posterior_mean_coef1, t, x_t.shape) * xprev
@@ -382,7 +382,7 @@ class GaussianDiffusion:
                 self.posterior_mean_coef2 / self.posterior_mean_coef1, t, x_t.shape
             )
             * x_t
-        )
+        ) # 本来是mean=coef2*x_t + coef1*x_0，现在则是: x_0 = (mean - coef2*x_t)/coef1 = 1/coef1 * xprev - coef2/coef1 * x_t，就是上面的代码所表示的了 
 
     def _predict_eps_from_xstart(self, x_t, t, pred_xstart):
         import ipdb; ipdb.set_trace()
@@ -436,7 +436,7 @@ class GaussianDiffusion:
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
         )  # no noise when t == 0
         # 0.5是为了得到标准方差: NOTE 方差开根号
-        sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
+        sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise # NOTE 这是根据p的t时刻的分布，来采样的
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
     def p_sample_loop(

@@ -1,7 +1,7 @@
 """
 Train a diffusion model on images.
 """
-
+import os
 import argparse
 
 from improved_diffusion import dist_util, logger
@@ -31,6 +31,7 @@ def set_rand_seed(seed):
 def main():
     import ipdb; ipdb.set_trace()
     # fix random seeds
+    os.environ["OPENAI_LOGDIR"] = "/workspace/asr/diffusion_models/improved-diffusion/checkpoints"
 
     seed = 666
     set_rand_seed(666)
@@ -38,7 +39,7 @@ def main():
     args = create_argparser().parse_args() # 各种控制参数的“汇总” NOTE step 1, type(args) = <class 'argparse.Namespace'>
 
     dist_util.setup_dist() # 分布式计算的一些配置，目前不看细节 TODO
-    logger.configure() # Logging to /tmp/openai-2023-01-07-23-30-56-035823
+    logger.configure() # Logging to /tmp/openai-2023-01-07-23-30-56-035823 -> /workspace/asr/diffusion_models/improved-diffusion/checkpoints
 
     import ipdb; ipdb.set_trace()
     logger.log("creating model and diffusion...")
@@ -48,7 +49,7 @@ def main():
     model.to(dist_util.dev()) # device(type='cuda', index=0)
 
     import ipdb; ipdb.set_trace()
-    schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion) # 返回的是采样器; args.schedule_sampler='loss-second-moment', duffusion=一个具体的object = <improved_diffusion.respace.SpacedDiffusion object at 0x7f4f51296250>
+    schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion) # TODO 什么含义? 返回的是采样器; args.schedule_sampler='loss-second-moment', duffusion=一个具体的object = <improved_diffusion.respace.SpacedDiffusion object at 0x7f4f51296250>
 
     import ipdb; ipdb.set_trace()
     logger.log("creating data loader...") # step 3, load data，导入数据

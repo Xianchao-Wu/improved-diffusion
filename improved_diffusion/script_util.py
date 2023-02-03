@@ -70,7 +70,7 @@ def create_model_and_diffusion(
         use_scale_shift_norm=use_scale_shift_norm, # True
         dropout=dropout, # 0.0
     ) # NOTE 创建模型，主要是对UNet的初始化，左边16层，右边16层，中间3层。
-
+    params = [param.nelement() for param in model.parameters() if param.requires_grad]; print('model size=', sum(params)) # 121,575,942 = 121.6M 参数！ NOTE
     import ipdb; ipdb.set_trace() # 开始初始化diffusion
     diffusion = create_gaussian_diffusion(
         steps=diffusion_steps, # 4000
@@ -83,7 +83,7 @@ def create_model_and_diffusion(
         rescale_learned_sigmas=rescale_learned_sigmas, # True
         timestep_respacing=timestep_respacing, # ''
     ) # NOTE 创建"扩散过程"
-
+    
     import ipdb; ipdb.set_trace()
     return model, diffusion
     # model = <class 'improved_diffusion.unet.UNetModel'>
@@ -268,7 +268,7 @@ def create_gaussian_diffusion(
                 if not sigma_small
                 else gd.ModelVarType.FIXED_SMALL
             )
-            if not learn_sigma
+            if not learn_sigma # learn_sigma=True, 学习方差
             else gd.ModelVarType.LEARNED_RANGE # <ModelVarType.LEARNED_RANGE: 4>
         ),
         loss_type=loss_type, # <LossType.RESCALED_KL: 4>

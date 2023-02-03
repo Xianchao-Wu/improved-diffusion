@@ -1,8 +1,8 @@
 #########################################################################
-# File Name: run_train.sh
+# File Name: run_sample.sh
 # Author: Xianchao Wu
 # mail: xianchaow@nvidia.com
-# Created Time: Sat Jan  7 06:59:37 2023
+# Created Time: Sat Jan  17 06:59:37 2023
 #########################################################################
 #!/bin/bash
 
@@ -11,11 +11,10 @@ DIFFUSION_FLAGS="--diffusion_steps 4000 --noise_schedule cosine --use_kl True" #
 TRAIN_FLAGS="--lr 1e-4 --batch_size 6 --schedule_sampler loss-second-moment"
 # batch_size=128 or 1 for debug only
 
-python -m ipdb scripts/image_train.py \
-    --data_dir /workspace/asr/diffusion_models/improved-diffusion/datasets/cifar_train_debug \
+python -m ipdb scripts/image_sample.py \
+    --model_path /workspace/asr/diffusion_models/improved-diffusion/checkpoints/model000000.pt \
     $MODEL_FLAGS \
-    $DIFFUSION_FLAGS \
-    $TRAIN_FLAGS
+    $DIFFUSION_FLAGS
 
 
 #root@95f4c42cafe7:/tmp# find ./* -name *.pt

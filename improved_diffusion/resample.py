@@ -14,7 +14,7 @@ def create_named_schedule_sampler(name, diffusion):
     """
     if name == "uniform":
         return UniformSampler(diffusion)
-    elif name == "loss-second-moment":
+    elif name == "loss-second-moment": # NOTE, in here
         return LossSecondMomentResampler(diffusion) # NOTE 这个非常重要
     else:
         raise NotImplementedError(f"unknown schedule sampler: {name}")
@@ -41,7 +41,7 @@ class ScheduleSampler(ABC):
 
     def sample(self, batch_size, device):
         """
-        Importance-sample timesteps for a batch.
+        Importance-sample timesteps for a batch. 一个batch的根据重要度来采样出来t, time
 
         :param batch_size: the number of timesteps.
         :param device: the torch device to save to.
@@ -50,7 +50,7 @@ class ScheduleSampler(ABC):
                  - weights: a tensor of weights to scale the resulting losses.
         """
         import ipdb; ipdb.set_trace()
-        w = self.weights() # 4000个1, array([1., 1., 1., ..., 1., 1., 1.])
+        w = self.weights() # 4000个1, array([1., 1., 1., ..., 1., 1., 1.]), 目前是均匀采样time t
         p = w / np.sum(w)
         indices_np = np.random.choice(len(p), size=(batch_size,), p=p) # e.g., array([2801]), sample of time t
         indices = th.from_numpy(indices_np).long().to(device) # tensor([2801], device='cuda:0')
@@ -103,6 +103,7 @@ class LossAwareSampler(ScheduleSampler):
         losses = [x.item() for y, bs in zip(loss_batches, batch_sizes) for x in y[:bs]]
         self.update_with_all_losses(timesteps, losses)
         # timesteps=[2801], losses=[5.559330940246582]
+
     @abstractmethod
     def update_with_all_losses(self, ts, losses):
         """
@@ -123,6 +124,7 @@ class LossAwareSampler(ScheduleSampler):
 
 class LossSecondMomentResampler(LossAwareSampler):
     def __init__(self, diffusion, history_per_term=10, uniform_prob=0.001): # diffusion=<improved_diffusion.respace.SpacedDiffusion object at 0x7f4f51296250>, history_per_term=10, uniform_prob=0.001
+        import ipdb; ipdb.set_trace()
         self.diffusion = diffusion
         self.history_per_term = history_per_term # 10
         self.uniform_prob = uniform_prob # 0.001
@@ -132,8 +134,9 @@ class LossSecondMomentResampler(LossAwareSampler):
         self._loss_counts = np.zeros([diffusion.num_timesteps], dtype=np.int) # (4000,)
 
     def weights(self):
-        if not self._warmed_up():
-            return np.ones([self.diffusion.num_timesteps], dtype=np.float64)
+        import ipdb; ipdb.set_trace()
+        if not self._warmed_up(): # NOTE, in
+            return np.ones([self.diffusion.num_timesteps], dtype=np.float64) # 4000个1.0, array([1., 1., 1., ..., 1., 1., 1.])
         weights = np.sqrt(np.mean(self._loss_history ** 2, axis=-1))
         weights /= np.sum(weights)
         weights *= 1 - self.uniform_prob
@@ -141,6 +144,7 @@ class LossSecondMomentResampler(LossAwareSampler):
         return weights
 
     def update_with_all_losses(self, ts, losses):
+        import ipdb; ipdb.set_trace()
         for t, loss in zip(ts, losses):
             if self._loss_counts[t] == self.history_per_term: # self.history_per_term=10，每个t时间点上，最多保存十个loss value! 
                 # Shift out the oldest loss term.
@@ -151,4 +155,5 @@ class LossSecondMomentResampler(LossAwareSampler):
                 self._loss_counts[t] += 1 # loss的数量增加1
 
     def _warmed_up(self):
+        import ipdb; ipdb.set_trace()
         return (self._loss_counts == self.history_per_term).all()

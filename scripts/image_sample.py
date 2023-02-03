@@ -41,14 +41,14 @@ def main():
     all_labels = []
     while len(all_images) * args.batch_size < args.num_samples:
         model_kwargs = {}
-        if args.class_cond:
+        if args.class_cond: # True
             classes = th.randint(
                 low=0, high=NUM_CLASSES, size=(args.batch_size,), device=dist_util.dev()
-            )
+            ) # 有意思，这是随机从0, 999这一千个class中随机出来16个ids NOTE
             model_kwargs["y"] = classes
         sample_fn = (
-            diffusion.p_sample_loop if not args.use_ddim else diffusion.ddim_sample_loop
-        )
+            diffusion.p_sample_loop if not args.use_ddim else diffusion.ddim_sample_loop # args.use_ddim=False
+        ) # sample_fn = <bound method GaussianDiffusion.p_sample_loop of <improved_diffusion.respace.SpacedDiffusion object at 0x7f3aa30fe460>>, 方法的签名 TODO
         sample = sample_fn(
             model,
             (args.batch_size, 3, args.image_size, args.image_size),

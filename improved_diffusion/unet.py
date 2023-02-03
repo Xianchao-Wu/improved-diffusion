@@ -721,6 +721,7 @@ class UNetModel(nn.Module):
                              block in the model.
                  - 'up': a list of hidden state tensors from upsampling.
         """
+        import ipdb; ipdb.set_trace() # TODO not used?
         hs = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         if self.num_classes is not None:
@@ -758,6 +759,7 @@ class SuperResModel(UNetModel):
         return super().forward(x, timesteps, **kwargs)
 
     def get_feature_vectors(self, x, timesteps, low_res=None, **kwargs):
+        import ipdb; ipdb.set_trace()
         _, new_height, new_width, _ = x.shape
         upsampled = F.interpolate(low_res, (new_height, new_width), mode="bilinear")
         x = th.cat([x, upsampled], dim=1)

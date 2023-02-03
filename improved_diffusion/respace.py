@@ -18,14 +18,15 @@ def space_timesteps(num_timesteps, section_counts):
     from the DDIM paper is used, and only one section is allowed.
 
     :param num_timesteps: the number of diffusion steps in the original
-                          process to divide up.
+                          process to divide up. e.g., num_timesteps=4000
     :param section_counts: either a list of numbers, or a string containing
                            comma-separated numbers, indicating the step count
                            per section. As a special case, use "ddimN" where N
                            is a number of steps to use the striding from the
-                           DDIM paper.
+                           DDIM paper. e.g., section_counts=[4000]
     :return: a set of diffusion steps from the original process to use.
     """
+    import ipdb; ipdb.set_trace()
     if isinstance(section_counts, str):
         if section_counts.startswith("ddim"):
             desired_count = int(section_counts[len("ddim") :])
@@ -36,28 +37,28 @@ def space_timesteps(num_timesteps, section_counts):
                 f"cannot create exactly {num_timesteps} steps with an integer stride"
             )
         section_counts = [int(x) for x in section_counts.split(",")]
-    size_per = num_timesteps // len(section_counts)
-    extra = num_timesteps % len(section_counts)
+    size_per = num_timesteps // len(section_counts) # 4000 / 1 = 4000 = size_per
+    extra = num_timesteps % len(section_counts) # 0
     start_idx = 0
     all_steps = []
-    for i, section_count in enumerate(section_counts):
+    for i, section_count in enumerate(section_counts): # i=0, section_count=4000
         size = size_per + (1 if i < extra else 0)
-        if size < section_count:
+        if size < section_count: # size=4000, section_count=4000
             raise ValueError(
                 f"cannot divide section of {size} steps into {section_count}"
             )
         if section_count <= 1:
             frac_stride = 1
         else:
-            frac_stride = (size - 1) / (section_count - 1)
+            frac_stride = (size - 1) / (section_count - 1) # frac_stride=1.0
         cur_idx = 0.0
         taken_steps = []
         for _ in range(section_count):
             taken_steps.append(start_idx + round(cur_idx))
             cur_idx += frac_stride
-        all_steps += taken_steps
-        start_idx += size
-    return set(all_steps)
+        all_steps += taken_steps # all_steps=[0, 1, ..., 3999]
+        start_idx += size # start_idx=4000
+    return set(all_steps) # 这是变成一个集合了, {0, 1, ..., 3999}
 
 
 class SpacedDiffusion(GaussianDiffusion):
@@ -75,7 +76,7 @@ class SpacedDiffusion(GaussianDiffusion):
         self.timestep_map = [] # NOTE, 是连续的，还是跳跃式的(spaced的)
         self.original_num_steps = len(kwargs["betas"]) # 做多少步的加噪, 4000
         import ipdb; ipdb.set_trace() # 
-        base_diffusion = GaussianDiffusion(**kwargs)  # pylint: disable=missing-kwoa
+        base_diffusion = GaussianDiffusion(**kwargs)  # pylint: disable=missing-kwoa; NOTE 这是直接调用父类的构造函数...
         last_alpha_cumprod = 1.0
         new_betas = []
         for i, alpha_cumprod in enumerate(base_diffusion.alphas_cumprod):

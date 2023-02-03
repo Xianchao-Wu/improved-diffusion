@@ -49,7 +49,7 @@ class TrainLoop:
         import ipdb; ipdb.set_trace()
         self.model = model # UNetModel
         self.diffusion = diffusion # SpacedDiffusion
-        self.data = data # generator, dataset
+        self.data = data # generator, dataset, <generator object load_data at 0x7f6ad86b7740>
         self.batch_size = batch_size # 128
         self.microbatch = microbatch if microbatch > 0 else batch_size # 128
         self.lr = lr # 0.0001
@@ -173,6 +173,18 @@ class TrainLoop:
             self.run_step(batch, cond)
             if self.step % self.log_interval == 0:
                 logger.dumpkvs()
+            ''' e.g., 
+            ------------------------
+            | grad_norm | 37       |
+            | loss      | 23.4     |
+            | loss_q0   | 83.8     |
+            | loss_q2   | 5.59     |
+            | loss_q3   | 19.8     |
+            | samples   | 6        |
+            | step      | 0        |
+            ------------------------
+
+            '''
             if self.step % self.save_interval == 0:
                 self.save()
                 # Run for a finite amount of time in integration tests.
@@ -182,6 +194,12 @@ class TrainLoop:
         # Save the last checkpoint if it wasn't already saved.
         if (self.step - 1) % self.save_interval != 0:
             self.save()
+        # NOTE saved checkpoint space=
+        '''root@95f4c42cafe7:/tmp# find ./* -name *.pt
+        ./openai-2023-01-15-23-52-42-091905/ema_0.9999_000000.pt
+        ./openai-2023-01-15-23-52-42-091905/model000000.pt
+        ./openai-2023-01-15-23-52-42-091905/opt000000.pt
+        '''
 
     def run_step(self, batch, cond): # batch.shape=[1, 3, 64, 64]; cond={'y': tensor([1])
         import ipdb; ipdb.set_trace()
